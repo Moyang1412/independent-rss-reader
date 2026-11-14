@@ -1,5 +1,4 @@
 import type { FeedEntry } from '../core/model';
-import { requestUrl } from 'obsidian';
 
 export const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
 export const DEFAULT_DEEPSEEK_MODEL = 'deepseek-flash';
@@ -34,21 +33,6 @@ export interface DeepSeekChatOptions {
 }
 
 export type DeepSeekFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-
-async function obsidianFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
-  const headers = init.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
-    ? Object.fromEntries(Object.entries(init.headers as Record<string, string>))
-    : undefined;
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-  const response = await requestUrl({
-    url,
-    method: String(init.method || 'GET'),
-    headers,
-    body: typeof init.body === 'string' ? init.body : undefined,
-    throw: false,
-  });
-  return new Response(response.text, { status: response.status, headers: response.headers });
-}
 
 export class DeepSeekError extends Error {
   constructor(message: string, readonly status?: number) {
@@ -86,7 +70,7 @@ export class DeepSeekClient {
   private readonly config: DeepSeekConfig;
   private readonly fetchFn: DeepSeekFetch;
 
-  constructor(config: DeepSeekConfig, fetchFn: DeepSeekFetch = obsidianFetch) {
+  constructor(config: DeepSeekConfig, fetchFn: DeepSeekFetch = fetch) {
     this.config = { ...DEFAULT_DEEPSEEK_CONFIG, ...config };
     this.fetchFn = fetchFn;
   }

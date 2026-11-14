@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.4 — 2026-11-15
+
+State migration framework and subscription management.
+
+### Included
+
+- Versioned state migration from legacy v1 data to v2;
+- Automatic removal of the old plugin-specific Daily Note folder setting;
+- Typed subscription and article state validation;
+- Edit subscription URL, name, and group;
+- Pause and resume subscriptions;
+- Refresh one subscription independently;
+- Skip paused subscriptions during full refresh;
+- Show unread count, latest update date, paused state, and refresh errors;
+- Right-click subscription management menu.
+
+### Still to come
+
+- Delete subscription while keeping its articles;
+- Drag-and-drop subscription ordering;
+- OPML file picker import.
+
 ## 0.1.3 — 2026-11-14
 
 Direct microphone recording for DeepSeek voice search.

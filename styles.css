@@ -11,6 +11,7 @@
 .lrr-source-group + .lrr-source-group { margin-top: 14px; }
 .lrr-source-row, .lrr-article-row { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-normal); text-align: left; cursor: pointer; }
 .lrr-source-row { justify-content: space-between; padding: 8px; }
+.lrr-source-icon { flex: 0 0 18px; width: 18px; height: 18px; border-radius: 4px; object-fit: cover; }
 .lrr-source-row[draggable="true"] { cursor: grab; }
 .lrr-source-row[draggable="true"]:active { cursor: grabbing; }
 .lrr-source-row:hover, .lrr-source-row[aria-pressed="true"], .lrr-article-row:hover, .lrr-article-row[aria-pressed="true"] { background: var(--background-modifier-hover); }

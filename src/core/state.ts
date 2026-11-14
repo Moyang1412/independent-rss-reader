@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { StoredState, Subscription } from './model';
+import { DEFAULT_DEEPSEEK_CONFIG } from '../ai/deepseek';
 
 const subscriptionSchema = z.object({
   id: z.string(), url: z.string(), name: z.string(), group: z.string().default(''),
@@ -17,6 +18,18 @@ export const stateSchema = z.object({
   selectedSubscriptionId: z.string().default(''),
   selectedEntryId: z.string().default(''),
   query: z.string().default(''),
+  deepseek: z.object({
+    enabled: z.boolean().default(DEFAULT_DEEPSEEK_CONFIG.enabled),
+    apiKey: z.string().default(''),
+    baseUrl: z.string().default(DEFAULT_DEEPSEEK_CONFIG.baseUrl),
+    model: z.string().default(DEFAULT_DEEPSEEK_CONFIG.model),
+    timeoutMs: z.number().int().positive().default(DEFAULT_DEEPSEEK_CONFIG.timeoutMs),
+  }).default(DEFAULT_DEEPSEEK_CONFIG),
+  aiSummaries: z.record(z.string(), z.object({
+    text: z.string(),
+    createdAt: z.number().default(0),
+    model: z.string().default(''),
+  })).default({}),
 });
 
 export function normalizeState(value: unknown): StoredState {
@@ -30,5 +43,7 @@ export function normalizeState(value: unknown): StoredState {
     selectedSubscriptionId: parsed.selectedSubscriptionId,
     selectedEntryId: parsed.selectedEntryId,
     query: parsed.query,
+    deepseek: parsed.deepseek,
+    aiSummaries: parsed.aiSummaries,
   };
 }

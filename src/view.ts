@@ -149,6 +149,18 @@ export class ReaderView extends ItemView {
     favorite.onclick = () => { this.plugin.toggleFavorite(entry.id); this.render(); };
     const later = actions.createEl('button', { text: this.plugin.state.laterIds.includes(entry.id) ? '移出稍后读' : '稍后读', attr: { type: 'button' } });
     later.onclick = () => { this.plugin.toggleLater(entry.id); this.render(); };
+    const cachedSummary = this.plugin.getCachedSummary(entry.id);
+    const summarize = actions.createEl('button', { text: cachedSummary ? '已生成摘要' : '生成摘要', attr: { type: 'button' } });
+    summarize.disabled = !cachedSummary && !this.plugin.canUseDeepSeek();
+    if (summarize.disabled) summarize.title = '请先在插件设置中启用 DeepSeek 并填写 API Key';
+    summarize.onclick = () => {
+      summarize.disabled = true;
+      summarize.setText('生成中…');
+      void this.plugin.summarizeEntry(entry).then(() => this.render()).catch(error => {
+        new Notice(error instanceof Error ? error.message : '摘要生成失败');
+        this.render();
+      });
+    };
     const note = actions.createEl('button', { text: '记到今日日记', attr: { type: 'button' } });
     note.onclick = () => { void this.plugin.appendDailyNote(entry).then(() => new Notice('已追加到今日日记')).catch(error => new Notice(error instanceof Error ? error.message : '写入失败')); };
     if (entry.link) {
@@ -157,6 +169,11 @@ export class ReaderView extends ItemView {
     }
     const content = this.article.createDiv({ cls: 'lrr-article-content' });
     safeSetHtml(content, sanitizeArticleHtml(entry.content, entry.link || undefined));
+    if (cachedSummary) {
+      const summary = this.article.createDiv({ cls: 'lrr-ai-summary' });
+      summary.createEl('h3', { text: 'DeepSeek 摘要' });
+      summary.createEl('div', { text: cachedSummary });
+    }
   }
 
   override onClose() { this.destroyed = true; this.contentEl.empty(); return Promise.resolve(); }

@@ -7,6 +7,7 @@ import { exportOpml, normalizeFeedUrl, parseOpml } from './core/feed-parser';
 import { ImportOpmlModal } from './opml-modal';
 import { ReaderSettingsTab } from './settings-tab';
 import { READER_VIEW_TYPE, ReaderView } from './view';
+import { createObsidianDeepSeekClient } from './ai/deepseek-obsidian';
 
 function unique(values: string[]) { return [...new Set(values)]; }
 
@@ -38,6 +39,27 @@ export default class LocalRssPlugin extends Plugin {
   openImportOpml() { new ImportOpmlModal(this).open(); }
 
   async persist() { await this.saveData(this.state); this.refreshViews(); }
+
+  canUseDeepSeek() {
+    return this.state.deepseek.enabled && Boolean(this.state.deepseek.apiKey.trim());
+  }
+
+  getCachedSummary(entryId: string) {
+    return this.state.aiSummaries[entryId]?.text || '';
+  }
+
+  async summarizeEntry(entry: FeedEntry) {
+    const cached = this.state.aiSummaries[entry.id];
+    if (cached?.text) return cached.text;
+    const summary = await createObsidianDeepSeekClient(this.state.deepseek).summarize(entry);
+    this.state.aiSummaries[entry.id] = {
+      text: summary,
+      createdAt: Date.now(),
+      model: this.state.deepseek.model.trim(),
+    };
+    await this.persist();
+    return summary;
+  }
 
   private refreshViews() {
     for (const leaf of this.app.workspace.getLeavesOfType(READER_VIEW_TYPE)) {

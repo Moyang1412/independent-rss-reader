@@ -1,3 +1,5 @@
+import type { DeepSeekConfig } from '../ai/deepseek';
+
 export type FeedFormat = 'rss' | 'rdf' | 'atom';
 
 export interface FeedEntry {
@@ -55,4 +57,12 @@ export interface StoredState {
   selectedSubscriptionId?: string;
   selectedEntryId?: string;
   query: string;
+  deepseek: DeepSeekConfig;
+  aiSummaries: Record<string, AiSummary>;
+}
+
+export interface AiSummary {
+  text: string;
+  createdAt: number;
+  model: string;
 }

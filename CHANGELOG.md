@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.0 — 2026-11-15
+
+Add an optional article translation adapter while keeping original articles and local reading independent.
+
+### Included
+
+- Add DeepSeek-compatible article translation through the existing Chat Completions configuration;
+- Add target-language configuration and local translation caching by article ID;
+- Keep translations opt-in, preserve the original article, and report failures without changing feed state;
+- Add state migration to v10 for translation settings and cached translations.
+
 ## 0.9.0 — 2026-11-15
 
 Add an optional remote read-only service adapter while keeping local RSS as the primary reading path.

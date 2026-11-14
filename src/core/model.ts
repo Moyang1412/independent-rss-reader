@@ -1,6 +1,6 @@
 import type { DeepSeekConfig } from '../ai/deepseek';
 
-export const CURRENT_STATE_VERSION = 9 as const;
+export const CURRENT_STATE_VERSION = 10 as const;
 export const SAVED_ENTRIES_SUBSCRIPTION_ID = '__saved_entries__';
 
 export type FeedFormat = 'rss' | 'rdf' | 'atom';
@@ -81,6 +81,11 @@ export interface RemoteReadOnlyConfig {
   timeoutMs: number;
 }
 
+export interface TranslationSettings {
+  enabled: boolean;
+  targetLanguage: string;
+}
+
 export interface RefreshConfig {
   enabled: boolean;
   intervalMinutes: number;
@@ -136,12 +141,21 @@ export interface StoredState {
   query: string;
   deepseek: DeepSeekConfig;
   remote: RemoteReadOnlyConfig;
+  translation: TranslationSettings;
   aiSummaries: Record<string, AiSummary>;
+  aiTranslations: Record<string, AiTranslation>;
   savedEntries: FeedEntry[];
 }
 
 export interface AiSummary {
   text: string;
   createdAt: number;
+  model: string;
+}
+
+export interface AiTranslation {
+  text: string;
+  createdAt: number;
+  targetLanguage: string;
   model: string;
 }

@@ -19,6 +19,7 @@ import { READER_VIEW_TYPE, ReaderView } from './view';
 import { createObsidianDeepSeekClient } from './ai/deepseek-obsidian';
 import { createObsidianDeepSeekAsrClient } from './ai/deepseek-asr-obsidian';
 import type { DeepSeekAsrResult } from './ai/deepseek-asr';
+import { createObsidianTranslationClient } from './ai/translation-obsidian';
 import { createObsidianRemoteRegistry } from './remote/obsidian';
 import { mergeRemoteSnapshot, remoteSubscriptionKey } from './remote/adapter';
 
@@ -204,6 +205,38 @@ export default class LocalRssPlugin extends Plugin {
     return this.state.deepseek.enabled && Boolean(this.state.deepseek.apiKey.trim());
   }
 
+  canUseTranslation() {
+    return this.state.translation.enabled && this.canUseDeepSeek() && Boolean(this.state.translation.targetLanguage.trim());
+  }
+
+  getCachedTranslation(entryId: string) {
+    const cached = this.state.aiTranslations[entryId];
+    return cached?.targetLanguage === this.getTranslationTargetLanguage() ? cached.text : '';
+  }
+
+  getTranslationTargetLanguage() {
+    return this.state.translation.targetLanguage.trim() || '中文';
+  }
+
+  async translateEntry(entry: FeedEntry) {
+    const cached = this.state.aiTranslations[entry.id];
+    if (cached?.text && cached.targetLanguage === this.getTranslationTargetLanguage()) return cached.text;
+    if (!this.canUseTranslation()) throw new Error('请先在设置中启用文章翻译、DeepSeek 并填写 API Key');
+    const translation = await createObsidianTranslationClient({
+      ...this.state.deepseek,
+      enabled: this.state.translation.enabled && this.state.deepseek.enabled,
+      targetLanguage: this.getTranslationTargetLanguage(),
+    }).translate(entry);
+    this.state.aiTranslations[entry.id] = {
+      text: translation,
+      createdAt: Date.now(),
+      targetLanguage: this.getTranslationTargetLanguage(),
+      model: this.state.deepseek.model.trim(),
+    };
+    await this.persist();
+    return translation;
+  }
+
   getCachedSummary(entryId: string) {
     return this.state.aiSummaries[entryId]?.text || '';
   }
@@ -336,7 +369,6 @@ export default class LocalRssPlugin extends Plugin {
   async updateSubscription(id: string, rawUrl: string, requestedName = '', requestedGroup = '', requestedCacheLimit?: number) {
     const subscription = this.state.subscriptions.find(item => item.id === id);
     if (!subscription) throw new Error('订阅不存在');
-    if (subscription.remote) throw new Error('远程只读订阅不能编辑');
     if (subscription.remote) throw new Error('远程只读订阅不能编辑');
     const url = normalizeFeedUrl(rawUrl);
     const duplicate = this.state.subscriptions.find(item => item.id !== id && item.url === url);

@@ -12,6 +12,11 @@ export const DEFAULT_REMOTE_READ_ONLY_CONFIG = {
   timeoutMs: 15_000,
 } as const;
 
+export const DEFAULT_TRANSLATION_SETTINGS = {
+  enabled: false,
+  targetLanguage: '中文',
+} as const;
+
 const rawStateSchema = z.looseObject({ version: z.number().int().nonnegative().optional() });
 
 function migratedObject(value: unknown): Record<string, unknown> {
@@ -31,6 +36,7 @@ function migratedObject(value: unknown): Record<string, unknown> {
   if (version < 7) data = { ...data, version: CURRENT_STATE_VERSION, articleKnowledge: data.articleKnowledge || {} };
   if (version < 8) data = { ...data, version: CURRENT_STATE_VERSION };
   if (version < 9) data = { ...data, version: CURRENT_STATE_VERSION, remote: data.remote || {} };
+  if (version < 10) data = { ...data, version: CURRENT_STATE_VERSION, translation: data.translation || {}, aiTranslations: data.aiTranslations || {} };
   return data;
 }
 
@@ -100,9 +106,19 @@ export const stateSchema = z.object({
     apiKey: z.string().default(DEFAULT_REMOTE_READ_ONLY_CONFIG.apiKey),
     timeoutMs: z.number().int().positive().default(DEFAULT_REMOTE_READ_ONLY_CONFIG.timeoutMs),
   }).default(DEFAULT_REMOTE_READ_ONLY_CONFIG),
+  translation: z.object({
+    enabled: z.boolean().default(DEFAULT_TRANSLATION_SETTINGS.enabled),
+    targetLanguage: z.string().default(DEFAULT_TRANSLATION_SETTINGS.targetLanguage),
+  }).default(DEFAULT_TRANSLATION_SETTINGS),
   aiSummaries: z.record(z.string(), z.object({
     text: z.string(),
     createdAt: z.number().default(0),
+    model: z.string().default(''),
+  })).default({}),
+  aiTranslations: z.record(z.string(), z.object({
+    text: z.string(),
+    createdAt: z.number().default(0),
+    targetLanguage: z.string().default(DEFAULT_TRANSLATION_SETTINGS.targetLanguage),
     model: z.string().default(''),
   })).default({}),
   savedEntries: z.array(z.object({
@@ -131,7 +147,9 @@ export function normalizeState(value: unknown): StoredState {
     query: parsed.query,
     deepseek: parsed.deepseek,
     remote: parsed.remote,
+    translation: parsed.translation,
     aiSummaries: parsed.aiSummaries,
+    aiTranslations: parsed.aiTranslations,
     savedEntries: parsed.savedEntries,
   };
 }

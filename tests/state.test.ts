@@ -22,6 +22,8 @@ describe('state migrations', () => {
     expect(state.remote.adapterId).toBe('json');
     expect(state.remote.timeoutMs).toBe(15_000);
     expect(state.remote).toEqual({ enabled: false, adapterId: 'json', baseUrl: '', apiKey: '', timeoutMs: 15_000 });
+    expect(state.translation).toEqual({ enabled: false, targetLanguage: '中文' });
+    expect(state.aiTranslations).toEqual({});
   });
 
   it('migrates legacy v1 data and removes the old daily note setting', () => {
@@ -66,5 +68,12 @@ describe('state migrations', () => {
 
   it('rejects data from a future version', () => {
     expect(() => normalizeState({ version: CURRENT_STATE_VERSION + 1 })).toThrow('不支持的本地数据版本');
+  });
+
+  it('migrates translation settings and cached translations from v9', () => {
+    const state = normalizeState({ version: 9, translation: { enabled: true, targetLanguage: 'English' }, aiTranslations: { one: { text: 'Translated', createdAt: 1, targetLanguage: 'English', model: 'deepseek-flash' } } });
+    expect(state.version).toBe(CURRENT_STATE_VERSION);
+    expect(state.translation).toEqual({ enabled: true, targetLanguage: 'English' });
+    expect(state.aiTranslations.one.text).toBe('Translated');
   });
 });

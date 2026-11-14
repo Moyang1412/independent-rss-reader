@@ -147,5 +147,20 @@ export class ReaderSettingsTab extends PluginSettingTab {
         await this.plugin.persist();
       });
     });
+
+    new Setting(containerEl).setName('文章翻译（可选）').setHeading();
+    containerEl.createEl('p', { text: '翻译复用上面的 DeepSeek API 配置，只发送当前打开的文章；译文保存在本地，不会替换原文。未启用或翻译失败时，本地阅读功能继续可用。' });
+    new Setting(containerEl).setName('启用文章翻译').setDesc('默认关闭。启用后可在文章页面按需翻译当前文章；同时需要启用 DeepSeek 并填写 API Key。').addToggle(toggle => {
+      toggle.setValue(this.plugin.state.translation.enabled).onChange(async value => {
+        this.plugin.state.translation.enabled = value;
+        await this.plugin.persist();
+      });
+    });
+    new Setting(containerEl).setName('目标语言').setDesc('例如中文、English、日本語。').addText(text => {
+      text.setValue(this.plugin.state.translation.targetLanguage).onChange(async value => {
+        this.plugin.state.translation.targetLanguage = value.trim() || '中文';
+        await this.plugin.persist();
+      });
+    });
   }
 }

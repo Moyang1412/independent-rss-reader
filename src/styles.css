@@ -57,6 +57,9 @@
 .lrr-article-content img { display: block; max-width: 100%; height: auto; margin: 1em auto; }
 .lrr-article-content pre { overflow: auto; padding: 12px; border-radius: 6px; background: var(--background-secondary); }
 .lrr-article-content a { overflow-wrap: anywhere; }
+.lrr-translation { max-width: 820px; margin: 24px auto 0; padding: 16px; border: 1px solid var(--background-modifier-border); border-radius: 8px; background: var(--background-secondary); }
+.lrr-translation h3 { margin: 0 0 10px; }
+.lrr-translation-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; }
 .lrr-empty { color: var(--text-muted); text-align: center; margin-top: 20vh; }
 .lrr-form-hint { color: var(--text-muted); }
 .lrr-modal-actions { justify-content: flex-end; margin-top: 16px; }

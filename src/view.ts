@@ -440,6 +440,18 @@ export class ReaderView extends ItemView {
         this.render();
       });
     };
+    const cachedTranslation = this.plugin.getCachedTranslation(entry.id);
+    const translate = actions.createEl('button', { text: cachedTranslation ? '已翻译' : '翻译文章', attr: { type: 'button', 'aria-label': cachedTranslation ? '查看本地缓存译文' : '翻译当前文章' } });
+    translate.disabled = !cachedTranslation && !this.plugin.canUseTranslation();
+    if (translate.disabled) translate.title = '请先在设置中启用文章翻译，并配置 DeepSeek API Key';
+    translate.onclick = () => {
+      translate.disabled = true;
+      translate.setText('翻译中…');
+      void this.plugin.translateEntry(entry).then(() => this.render()).catch(error => {
+        new Notice(error instanceof Error ? error.message : '文章翻译失败');
+        this.render();
+      });
+    };
     const note = actions.createEl('button', { text: '记到今日日记', attr: { type: 'button' } });
     note.onclick = () => { void this.plugin.appendDailyNote(entry).then(() => new Notice('已追加到今日日记')).catch(error => new Notice(error instanceof Error ? error.message : '写入失败')); };
     if (entry.link) {
@@ -457,6 +469,11 @@ export class ReaderView extends ItemView {
       const summary = this.article.createDiv({ cls: 'lrr-ai-summary' });
       summary.createEl('h3', { text: 'DeepSeek 摘要' });
       summary.createEl('div', { text: cachedSummary });
+    }
+    if (cachedTranslation) {
+      const translation = this.article.createDiv({ cls: 'lrr-translation', attr: { 'aria-live': 'polite' } });
+      translation.createEl('h3', { text: `文章翻译（${this.plugin.state.translation.targetLanguage}）` });
+      translation.createDiv({ text: cachedTranslation, cls: 'lrr-translation-body' });
     }
   }
 

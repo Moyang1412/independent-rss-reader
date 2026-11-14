@@ -1,44 +1,110 @@
 # 本地 RSS 阅读器
 
-This is an independent Obsidian plugin for reading personal RSS and Atom subscriptions locally.
+一个独立的 Obsidian 插件，用于在库内阅读个人 RSS 和 Atom 订阅。
 
-The first version is MIT-licensed. It does not connect to the Qiaomu service and does not include podcasts, speech, laboratory workflows, Agent integration, or Qiaomu branding.
+首个版本采用 MIT 许可证，不连接乔木服务，也不包含播客、语音、实验室、Agent 或乔木品牌功能。
 
-## First-version scope
+## 功能
 
-- RSS 2.x, RSS 1.0/RDF, and Atom 1.0 feeds
-- OPML import and export
-- Local subscription groups
-- Article list, search, read state, favorites, and reading later
-- Safe article HTML rendering
-- Local persistence through the Obsidian vault plugin data store
-- Append a title link to today's Daily Note using Obsidian's core Daily Notes folder, format, and template settings
+- 支持 RSS 2.x、RSS 1.0/RDF 和 Atom 1.0；
+- 添加个人订阅、重命名和分组；
+- OPML 粘贴导入和库内导出；
+- 文章搜索、未读、收藏和稍后读；
+- 安全清理文章 HTML 和链接；
+- 本地保存订阅、文章状态和阅读数据；
+- 使用 Obsidian 核心 Daily Notes 设置写入今日日记。
 
-## Development
+## 安装
 
-```sh
-npm ci
-npm run check
-```
-
-The plugin bundle is written to `main.js`, and the build copies the stylesheet to the root `styles.css`.
-
-## Install
-
-Download the latest zip from the [GitHub Releases](../../releases) page, then extract it into your vault:
+从 [GitHub Releases](../../releases) 下载最新 zip，解压到你的 Obsidian 库：
 
 ```text
-<vault>/.obsidian/plugins/independent-rss-reader/
+<你的库>/.obsidian/plugins/independent-rss-reader/
 ├── main.js
 ├── manifest.json
 ├── styles.css
 └── LICENSE
 ```
 
-Open Obsidian settings → Community plugins, turn off Restricted mode if needed, and enable **本地 RSS 阅读器**. The plugin ID is `independent-rss-reader`.
+然后在 Obsidian 中打开“设置 → 第三方插件”：
 
-The current release uses Obsidian's core Daily Notes settings for “记到今日日记”: its folder, date format, and template are read at action time.
+1. 如果启用了安全模式，先关闭安全模式；
+2. 在已安装插件中找到“本地 RSS 阅读器”；
+3. 打开插件开关。
 
-## License
+插件 ID 是 `independent-rss-reader`。
 
-The project code is licensed under the MIT License. See [LICENSE](LICENSE). Dependencies and remote feed content retain their own licenses and terms.
+## 使用
+
+### 打开阅读器
+
+启用插件后，点击左侧 RSS 图标，或在命令面板中运行“打开本地 RSS”。
+
+### 添加 RSS 或 Atom
+
+1. 点击阅读器顶部的“+”；
+2. 输入 RSS 或 Atom 地址，例如：
+
+   ```text
+   https://www.ruanyifeng.com/blog/atom.xml
+   ```
+
+3. 填写可选的名称和分组；
+4. 点击“添加”。
+
+插件会从该地址读取并解析订阅内容。订阅地址必须是 HTTP(S) 地址，不能包含用户名或密码。
+
+### 导入和导出 OPML
+
+- 在命令面板运行“导入 OPML”，粘贴 OPML 内容；
+- 在命令面板运行“导出 OPML”，文件会保存到库内的 `RSS Exports/subscriptions.opml`。
+
+导入会自动跳过重复地址和无效地址。
+
+### 刷新订阅
+
+点击阅读器顶部的刷新按钮，或运行“刷新 RSS 订阅”命令。刷新完成后会显示成功更新的订阅数量。网络失败时，已有本地文章仍会保留。
+
+### 阅读文章
+
+在左侧选择订阅，在文章列表中选择文章。你可以：
+
+- 使用搜索框搜索标题和摘要；
+- 按全部、未读、收藏或稍后读筛选；
+- 打开原文链接；
+- 收藏文章或加入稍后读。
+
+文章正文会在显示前清理脚本、危险链接、嵌入页面和表单内容。
+
+### 记到今日日记
+
+“记到今日日记”会读取 Obsidian 核心 Daily Notes 插件的设置，不使用本插件单独的目录配置。
+
+请先在 Obsidian 核心插件中配置：
+
+- 日记目录；
+- 日期格式；
+- 模板文件。
+
+打开文章后点击“记到今日日记”，插件会按照这些设置定位当天的 Markdown 文件，并追加文章标题和原文链接。重复点击同一篇文章不会重复追加。
+
+## 数据和隐私
+
+- RSS 内容直接从你添加的订阅地址读取；
+- 不连接乔木后端；
+- 不上传库内笔记、搜索词、已读状态或收藏；
+- 订阅、文章缓存和状态保存在库的插件数据目录中；
+- 图片和原文链接仍受对应网站的隐私政策和使用条款约束。
+
+## 开发
+
+```sh
+npm ci
+npm run check
+```
+
+构建产物是根目录的 `main.js` 和 `styles.css`。当前项目包含 TypeScript 类型检查、ESLint、Vitest 测试和 Obsidian 插件构建。
+
+## 许可证
+
+项目代码采用 MIT 许可证，详见 [LICENSE](LICENSE)。依赖、字体、RSS 文章、图片和其他远程内容保留各自的许可证和使用条款。

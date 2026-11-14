@@ -64,11 +64,35 @@ export default class LocalRssPlugin extends Plugin {
   }
 
   async transcribeAudio(file: File): Promise<DeepSeekAsrResult> {
+    const durationMs = await this.audioDurationMs(file);
     return createObsidianDeepSeekAsrClient(this.state.deepseek).transcribe({
       data: file,
       filename: file.name,
       mimeType: file.type,
+      durationMs,
     });
+  }
+
+  private async audioDurationMs(file: File): Promise<number | undefined> {
+    if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') return undefined;
+    const url = URL.createObjectURL(file);
+    try {
+      const audio = document.createElement('audio');
+      audio.preload = 'metadata';
+      return await new Promise<number | undefined>(resolve => {
+        const finish = (value: number | undefined) => {
+          audio.removeAttribute('src');
+          audio.load();
+          resolve(value);
+        };
+        audio.addEventListener('loadedmetadata', () => finish(Number.isFinite(audio.duration) ? audio.duration * 1_000 : undefined), { once: true });
+        audio.addEventListener('error', () => finish(undefined), { once: true });
+        audio.src = url;
+        audio.load();
+      });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   private refreshViews() {

@@ -8,6 +8,8 @@ import { ImportOpmlModal } from './opml-modal';
 import { ReaderSettingsTab } from './settings-tab';
 import { READER_VIEW_TYPE, ReaderView } from './view';
 import { createObsidianDeepSeekClient } from './ai/deepseek-obsidian';
+import { createObsidianDeepSeekAsrClient } from './ai/deepseek-asr-obsidian';
+import type { DeepSeekAsrResult } from './ai/deepseek-asr';
 
 function unique(values: string[]) { return [...new Set(values)]; }
 
@@ -59,6 +61,14 @@ export default class LocalRssPlugin extends Plugin {
     };
     await this.persist();
     return summary;
+  }
+
+  async transcribeAudio(file: File): Promise<DeepSeekAsrResult> {
+    return createObsidianDeepSeekAsrClient(this.state.deepseek).transcribe({
+      data: file,
+      filename: file.name,
+      mimeType: file.type,
+    });
   }
 
   private refreshViews() {

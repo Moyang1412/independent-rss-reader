@@ -63,8 +63,35 @@ export class ReaderView extends ItemView {
     this.sourceList = nav.createDiv({ cls: 'lrr-source-list' });
     const center = body.createDiv({ cls: 'lrr-center' });
     const searchWrap = center.createEl('search', { cls: 'lrr-search' });
-    this.search = searchWrap.createEl('input', { type: 'search', placeholder: '搜索文章', attr: { 'aria-label': '搜索文章' } });
+    const searchRow = searchWrap.createDiv({ cls: 'lrr-search-row' });
+    this.search = searchRow.createEl('input', { type: 'search', placeholder: '搜索文章', attr: { 'aria-label': '搜索文章' } });
     this.search.oninput = () => this.renderArticles();
+    const voice = searchRow.createEl('button', { text: '语音搜索', attr: { type: 'button', 'aria-label': '使用 DeepSeek 语音搜索' } });
+    voice.disabled = !this.plugin.canUseDeepSeek();
+    if (voice.disabled) voice.title = '请先在插件设置中启用 DeepSeek 并填写 API Key';
+    const audioInput = searchRow.createEl('input', { type: 'file', attr: { accept: '.wav,.ogg,.opus,audio/wav,audio/ogg,audio/opus', 'aria-label': '选择语音文件' } });
+    audioInput.hidden = true;
+    audioInput.addClass('lrr-audio-input-hidden');
+    voice.onclick = () => audioInput.click();
+    audioInput.onchange = () => {
+      const file = audioInput.files?.[0];
+      audioInput.value = '';
+      if (!file) return;
+      voice.disabled = true;
+      voice.setText('识别中…');
+      void this.plugin.transcribeAudio(file).then(result => {
+        this.search.value = result.text;
+        this.renderArticles();
+        new Notice('语音识别完成');
+      }).catch(error => {
+        new Notice(error instanceof Error ? error.message : '语音识别失败');
+      }).finally(() => {
+        if (!this.destroyed) {
+          voice.disabled = !this.plugin.canUseDeepSeek();
+          voice.setText('语音搜索');
+        }
+      });
+    };
     const filters = center.createDiv({ cls: 'lrr-filters', attr: { role: 'toolbar', 'aria-label': '文章筛选' } });
     for (const [value, label] of [['all', '全部'], ['unread', '未读'], ['favorites', '收藏'], ['later', '稍后读']] as const) {
       const button = filters.createEl('button', { text: label, attr: { type: 'button', 'aria-pressed': String(value === this.filter) } });

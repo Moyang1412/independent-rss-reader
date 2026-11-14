@@ -15,7 +15,7 @@ export class ReaderSettingsTab extends PluginSettingTab {
     new Setting(containerEl).setName('今日日记').setDesc('“记到今日日记”会读取 Obsidian 核心日记插件的目录、日期格式和模板设置。');
 
     new Setting(containerEl).setName('DeepSeek（可选）').setHeading();
-    containerEl.createEl('p', { text: '配置后可在文章页面生成摘要。API Key 只保存在当前 Obsidian 库的插件数据中；不配置时，本地 RSS 阅读功能仍可正常使用。' });
+    containerEl.createEl('p', { text: '配置后可在文章页面生成摘要或使用语音搜索。支持 16-bit PCM WAV、Ogg Opus，单个音频最多 8 MiB、120 秒。API Key 只保存在当前 Obsidian 库的插件数据中；不配置时，本地 RSS 阅读功能仍可正常使用。' });
     new Setting(containerEl).setName('启用 DeepSeek').setDesc('只影响摘要功能，不影响订阅、阅读、收藏和日记。').addToggle(toggle => {
       toggle.setValue(this.plugin.state.deepseek.enabled).onChange(async value => {
         this.plugin.state.deepseek.enabled = value;

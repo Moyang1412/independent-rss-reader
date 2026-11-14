@@ -16,7 +16,9 @@
 .lrr-source-count, .lrr-article-date { color: var(--text-muted); font-size: var(--font-ui-smaller); }
 .lrr-center { display: flex; flex-direction: column; border-right: 1px solid var(--background-modifier-border); }
 .lrr-search { padding: 12px 12px 8px; }
-.lrr-search input { width: 100%; box-sizing: border-box; }
+.lrr-search-row { display: flex; align-items: center; gap: 8px; }
+.lrr-search-row input[type="search"] { flex: 1; min-width: 0; box-sizing: border-box; }
+.lrr-audio-input-hidden { display: none; }
 .lrr-filters { display: flex; gap: 4px; padding: 0 12px 8px; }
 .lrr-filters button { flex: 1; min-height: 32px; }
 .lrr-filters button[aria-pressed="true"] { background: var(--interactive-accent); color: var(--text-on-accent); }

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.2 — 2026-11-14
+
+DeepSeek speech recognition for voice search.
+
+### Included
+
+- Optional DeepSeek ASR adapter using the standalone `/v1/tools/asr` endpoint;
+- WAV and Ogg Opus file selection from the reader search bar;
+- Local validation for supported formats and the 8 MiB file limit;
+- Voice transcript inserted into the local article search box;
+- Speech recognition remains opt-in and does not affect local RSS reading.
+
 ## 0.1.1 — 2026-11-14
 
 Optional DeepSeek article summaries.

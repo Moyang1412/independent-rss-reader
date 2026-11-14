@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.3 — 2026-11-14
+
+Direct microphone recording for DeepSeek voice search.
+
+### Included
+
+- Start and stop microphone recording from the reader search bar;
+- Local 16-bit PCM WAV encoding before upload;
+- Automatic microphone and audio-context cleanup on stop, cancel, close, or error;
+- Existing WAV/Ogg file selection remains available;
+- Microphone permission is requested only after the user starts recording.
+
 ## 0.1.2 — 2026-11-14
 
 DeepSeek speech recognition for voice search.

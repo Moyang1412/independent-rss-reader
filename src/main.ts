@@ -63,19 +63,19 @@ export default class LocalRssPlugin extends Plugin {
     return summary;
   }
 
-  async transcribeAudio(file: File): Promise<DeepSeekAsrResult> {
-    const durationMs = await this.audioDurationMs(file);
+  async transcribeAudio(audio: Blob, filename = 'recording.wav'): Promise<DeepSeekAsrResult> {
+    const durationMs = await this.audioDurationMs(audio);
     return createObsidianDeepSeekAsrClient(this.state.deepseek).transcribe({
-      data: file,
-      filename: file.name,
-      mimeType: file.type,
+      data: audio,
+      filename,
+      mimeType: audio.type,
       durationMs,
     });
   }
 
-  private async audioDurationMs(file: File): Promise<number | undefined> {
+  private async audioDurationMs(audio: Blob): Promise<number | undefined> {
     if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') return undefined;
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(audio);
     try {
       const audio = document.createElement('audio');
       audio.preload = 'metadata';

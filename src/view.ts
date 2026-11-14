@@ -3,6 +3,7 @@ import type LocalRssPlugin from './main';
 import type { FeedEntry, Subscription } from './core/model';
 import { sanitizeArticleHtml } from './core/feed-parser';
 import { ConfirmModal } from './confirm-modal';
+import { MicrophoneRecorder } from './audio/recorder';
 
 export const READER_VIEW_TYPE = 'independent-rss-reader-view';
 
@@ -36,6 +37,9 @@ export class ReaderView extends ItemView {
   private filter: Filter = 'all';
   private selectedId = '';
   private destroyed = false;
+  private microphone?: MicrophoneRecorder;
+  private voiceButton?: HTMLButtonElement;
+  private recordButton?: HTMLButtonElement;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: LocalRssPlugin) { super(leaf); }
   override getViewType() { return READER_VIEW_TYPE; }
@@ -66,9 +70,14 @@ export class ReaderView extends ItemView {
     const searchRow = searchWrap.createDiv({ cls: 'lrr-search-row' });
     this.search = searchRow.createEl('input', { type: 'search', placeholder: '搜索文章', attr: { 'aria-label': '搜索文章' } });
     this.search.oninput = () => this.renderArticles();
-    const voice = searchRow.createEl('button', { text: '语音搜索', attr: { type: 'button', 'aria-label': '使用 DeepSeek 语音搜索' } });
+    const voice = searchRow.createEl('button', { text: '选择音频', attr: { type: 'button', 'aria-label': '选择音频进行 DeepSeek 语音搜索' } });
+    this.voiceButton = voice;
     voice.disabled = !this.plugin.canUseDeepSeek();
     if (voice.disabled) voice.title = '请先在插件设置中启用 DeepSeek 并填写 API Key';
+    const record = searchRow.createEl('button', { text: '开始录音', attr: { type: 'button', 'aria-label': '开始麦克风录音' } });
+    this.recordButton = record;
+    record.disabled = voice.disabled;
+    if (record.disabled) record.title = '请先在插件设置中启用 DeepSeek 并填写 API Key';
     const audioInput = searchRow.createEl('input', { type: 'file', attr: { accept: '.wav,.ogg,.opus,audio/wav,audio/ogg,audio/opus', 'aria-label': '选择语音文件' } });
     audioInput.hidden = true;
     audioInput.addClass('lrr-audio-input-hidden');
@@ -77,21 +86,9 @@ export class ReaderView extends ItemView {
       const file = audioInput.files?.[0];
       audioInput.value = '';
       if (!file) return;
-      voice.disabled = true;
-      voice.setText('识别中…');
-      void this.plugin.transcribeAudio(file).then(result => {
-        this.search.value = result.text;
-        this.renderArticles();
-        new Notice('语音识别完成');
-      }).catch(error => {
-        new Notice(error instanceof Error ? error.message : '语音识别失败');
-      }).finally(() => {
-        if (!this.destroyed) {
-          voice.disabled = !this.plugin.canUseDeepSeek();
-          voice.setText('语音搜索');
-        }
-      });
+      if (file) void this.submitAudio(file, file.name);
     };
+    record.onclick = () => { void this.toggleRecording(); };
     const filters = center.createDiv({ cls: 'lrr-filters', attr: { role: 'toolbar', 'aria-label': '文章筛选' } });
     for (const [value, label] of [['all', '全部'], ['unread', '未读'], ['favorites', '收藏'], ['later', '稍后读']] as const) {
       const button = filters.createEl('button', { text: label, attr: { type: 'button', 'aria-pressed': String(value === this.filter) } });
@@ -203,5 +200,65 @@ export class ReaderView extends ItemView {
     }
   }
 
-  override onClose() { this.destroyed = true; this.contentEl.empty(); return Promise.resolve(); }
+  private updateAudioButtons() {
+    if (this.destroyed) return;
+    const enabled = this.plugin.canUseDeepSeek();
+    if (this.voiceButton) { this.voiceButton.disabled = !enabled; this.voiceButton.setText('选择音频'); }
+    if (this.recordButton) { this.recordButton.disabled = !enabled; this.recordButton.setText('开始录音'); }
+  }
+
+  private async submitAudio(audio: Blob, filename: string) {
+    if (!this.plugin.canUseDeepSeek()) return;
+    if (this.voiceButton) { this.voiceButton.disabled = true; this.voiceButton.setText('识别中…'); }
+    if (this.recordButton) { this.recordButton.disabled = true; this.recordButton.setText('识别中…'); }
+    try {
+      const result = await this.plugin.transcribeAudio(audio, filename);
+      this.search.value = result.text;
+      this.renderArticles();
+      new Notice('语音识别完成');
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : '语音识别失败');
+    } finally {
+      this.updateAudioButtons();
+    }
+  }
+
+  private async toggleRecording() {
+    if (this.microphone?.isRecording) {
+      try {
+        const audio = await this.microphone.stop();
+        this.microphone = undefined;
+        await this.submitAudio(audio.data, audio.filename);
+      } catch (error) {
+        new Notice(error instanceof Error ? error.message : '录音停止失败');
+        this.microphone = undefined;
+        this.updateAudioButtons();
+      }
+      return;
+    }
+    if (!this.plugin.canUseDeepSeek()) return;
+    try {
+      let recorder!: MicrophoneRecorder;
+      recorder = new MicrophoneRecorder({ onMaxDuration: audio => {
+        if (this.microphone === recorder) this.microphone = undefined;
+        void this.submitAudio(audio.data, audio.filename);
+      } });
+      await recorder.start();
+      this.microphone = recorder;
+      if (this.recordButton) { this.recordButton.setText('停止录音'); this.recordButton.disabled = false; }
+      if (this.voiceButton) this.voiceButton.disabled = true;
+      new Notice('正在录音，再次点击“停止录音”结束');
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : '无法开始录音');
+      this.updateAudioButtons();
+    }
+  }
+
+  override onClose() {
+    this.destroyed = true;
+    const cancel = this.microphone?.cancel();
+    this.microphone = undefined;
+    this.contentEl.empty();
+    return cancel || Promise.resolve();
+  }
 }

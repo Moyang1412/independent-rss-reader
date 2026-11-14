@@ -1,11 +1,12 @@
 import { moment, Notice, Plugin, TFile, normalizePath } from 'obsidian';
 import { AddFeedModal } from './add-feed-modal';
+import { DeleteFeedModal } from './delete-feed-modal';
 import { EditFeedModal } from './edit-feed-modal';
 import { fetchFeed } from './feed-service';
 import { needsStateMigration, normalizeState } from './core/state';
-import type { FeedEntry, Subscription, StoredState } from './core/model';
+import { SAVED_ENTRIES_SUBSCRIPTION_ID, type FeedEntry, type Subscription, type StoredState } from './core/model';
 import { exportOpml, normalizeFeedUrl, parseOpml } from './core/feed-parser';
-import { shouldRefreshSubscription } from './core/subscriptions';
+import { mergeSavedEntries, moveSubscription, shouldRefreshSubscription } from './core/subscriptions';
 import { ImportOpmlModal } from './opml-modal';
 import { ReaderSettingsTab } from './settings-tab';
 import { READER_VIEW_TYPE, ReaderView } from './view';
@@ -123,9 +124,24 @@ export default class LocalRssPlugin extends Plugin {
     await this.openReader();
   }
 
-  async removeSubscription(id: string) {
-    this.state.subscriptions = this.state.subscriptions.filter(subscription => subscription.id !== id);
-    if (this.state.selectedSubscriptionId === id) this.state.selectedSubscriptionId = this.state.subscriptions[0]?.id || '';
+  openDeleteSubscription(id: string) {
+    const subscription = this.state.subscriptions.find(item => item.id === id);
+    if (subscription) new DeleteFeedModal(this, subscription).open();
+  }
+
+  async removeSubscription(id: string, keepEntries = false) {
+    const subscription = this.state.subscriptions.find(item => item.id === id);
+    if (!subscription) return;
+    if (keepEntries) {
+      this.state.savedEntries = mergeSavedEntries(this.state.savedEntries, subscription.entries);
+    }
+    this.state.subscriptions = this.state.subscriptions.filter(item => item.id !== id);
+    if (this.state.selectedSubscriptionId === id) this.state.selectedSubscriptionId = this.state.subscriptions[0]?.id || (this.state.savedEntries.length ? SAVED_ENTRIES_SUBSCRIPTION_ID : '');
+    await this.persist();
+  }
+
+  async reorderSubscriptions(sourceId: string, targetId: string) {
+    this.state.subscriptions = moveSubscription(this.state.subscriptions, sourceId, targetId);
     await this.persist();
   }
 

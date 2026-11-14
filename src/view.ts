@@ -1,8 +1,7 @@
 import { ItemView, Menu, Notice, setIcon, type WorkspaceLeaf } from 'obsidian';
 import type LocalRssPlugin from './main';
-import type { FeedEntry, Subscription } from './core/model';
+import { SAVED_ENTRIES_SUBSCRIPTION_ID, type FeedEntry, type Subscription } from './core/model';
 import { sanitizeArticleHtml } from './core/feed-parser';
-import { ConfirmModal } from './confirm-modal';
 import { MicrophoneRecorder } from './audio/recorder';
 import { countUnreadEntries } from './core/subscriptions';
 
@@ -111,13 +110,18 @@ export class ReaderView extends ItemView {
   }
 
   private currentSubscription(): Subscription | undefined {
+    if (this.plugin.state.selectedSubscriptionId === SAVED_ENTRIES_SUBSCRIPTION_ID && this.plugin.state.savedEntries.length) {
+      return { id: SAVED_ENTRIES_SUBSCRIPTION_ID, url: '', name: '已保存文章', group: '已保存文章', entries: this.plugin.state.savedEntries, updatedAt: 0, lastAttemptAt: 0 };
+    }
     return this.plugin.state.subscriptions.find(item => item.id === (this.plugin.state.selectedSubscriptionId || this.plugin.state.subscriptions[0]?.id));
   }
 
   private renderSources() {
     this.sourceList.empty();
     const groups = new Map<string, Subscription[]>();
-    for (const subscription of this.plugin.state.subscriptions) {
+    const subscriptions = [...this.plugin.state.subscriptions];
+    if (this.plugin.state.savedEntries.length) subscriptions.push({ id: SAVED_ENTRIES_SUBSCRIPTION_ID, url: '', name: '已保存文章', group: '已保存文章', entries: this.plugin.state.savedEntries, updatedAt: 0, lastAttemptAt: 0 });
+    for (const subscription of subscriptions) {
       const group = subscription.group || '未分组';
       const list = groups.get(group) || []; list.push(subscription); groups.set(group, list);
     }
@@ -127,6 +131,8 @@ export class ReaderView extends ItemView {
       for (const subscription of subscriptions) {
         const row = section.createEl('button', { cls: 'lrr-source-row', attr: { type: 'button', 'aria-pressed': String(this.currentSubscription()?.id === subscription.id) } });
         row.createSpan({ text: subscription.name || subscription.url, cls: 'lrr-source-name' });
+        const isSaved = subscription.id === SAVED_ENTRIES_SUBSCRIPTION_ID;
+        row.draggable = !isSaved;
         const unread = countUnreadEntries(subscription, this.plugin.state.readIds);
         const meta = row.createSpan({ cls: 'lrr-source-meta' });
         meta.createSpan({ text: `${unread} 未读`, cls: 'lrr-source-unread' });
@@ -134,14 +140,20 @@ export class ReaderView extends ItemView {
         else if (subscription.error) meta.createSpan({ text: '更新失败', cls: 'lrr-source-error', attr: { title: subscription.error } });
         else if (subscription.updatedAt) meta.createSpan({ text: new Date(subscription.updatedAt).toLocaleDateString(), cls: 'lrr-source-date' });
         row.onclick = () => { this.plugin.state.selectedSubscriptionId = subscription.id; this.selectedId = ''; void this.plugin.persist(); this.render(); };
+        if (!isSaved) {
+          row.ondragstart = event => { event.dataTransfer?.setData('text/plain', subscription.id); if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'; };
+          row.ondragover = event => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'; };
+          row.ondrop = event => { event.preventDefault(); const sourceId = event.dataTransfer?.getData('text/plain'); if (sourceId && sourceId !== subscription.id) void this.plugin.reorderSubscriptions(sourceId, subscription.id); };
+        }
         row.oncontextmenu = event => {
           event.preventDefault();
+          if (isSaved) return;
           const menu = new Menu();
           menu.addItem(item => item.setTitle('编辑订阅').setIcon('pencil').onClick(() => this.plugin.openEditSubscription(subscription.id)));
           menu.addItem(item => item.setTitle(subscription.paused ? '恢复订阅' : '暂停订阅').setIcon(subscription.paused ? 'play' : 'pause').onClick(() => { void this.plugin.toggleSubscriptionPaused(subscription.id); }));
           menu.addItem(item => item.setTitle('刷新此订阅').setIcon('refresh-cw').onClick(() => { void this.plugin.refreshOneSubscription(subscription.id); }));
           menu.addSeparator();
-          menu.addItem(item => item.setTitle('删除订阅').setIcon('trash').onClick(() => new ConfirmModal(this.plugin.app, `删除订阅“${subscription.name}”？已保存的文章不会自动删除。`, () => { void this.plugin.removeSubscription(subscription.id); }).open()));
+          menu.addItem(item => item.setTitle('删除订阅').setIcon('trash').onClick(() => this.plugin.openDeleteSubscription(subscription.id)));
           menu.showAtMouseEvent(event);
         };
       }

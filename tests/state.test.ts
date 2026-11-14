@@ -9,6 +9,7 @@ describe('state migrations', () => {
     expect(state.subscriptions).toEqual([]);
     expect(state.deepseek.apiKey).toBe('');
     expect(state.aiSummaries).toEqual({});
+    expect(state.savedEntries).toEqual([]);
   });
 
   it('migrates legacy v1 data and removes the old daily note setting', () => {

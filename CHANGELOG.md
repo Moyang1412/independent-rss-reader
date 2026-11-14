@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.5 — 2026-11-15
+
+Complete the remaining subscription-management features.
+
+### Included
+
+- Choose whether to keep articles when deleting a subscription;
+- A local “已保存文章” collection for kept articles;
+- Drag-and-drop subscription ordering with persistence;
+- OPML file picker import for `.opml` and `.xml` files;
+- State migration to v3 for saved articles.
+
 ## 0.1.4 — 2026-11-15
 
 State migration framework and subscription management.

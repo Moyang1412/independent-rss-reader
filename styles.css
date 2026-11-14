@@ -11,6 +11,8 @@
 .lrr-source-group + .lrr-source-group { margin-top: 14px; }
 .lrr-source-row, .lrr-article-row { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-normal); text-align: left; cursor: pointer; }
 .lrr-source-row { justify-content: space-between; padding: 8px; }
+.lrr-source-row[draggable="true"] { cursor: grab; }
+.lrr-source-row[draggable="true"]:active { cursor: grabbing; }
 .lrr-source-row:hover, .lrr-source-row[aria-pressed="true"], .lrr-article-row:hover, .lrr-article-row[aria-pressed="true"] { background: var(--background-modifier-hover); }
 .lrr-source-name, .lrr-article-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lrr-source-meta { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
@@ -43,6 +45,7 @@
 .lrr-empty { color: var(--text-muted); text-align: center; margin-top: 20vh; }
 .lrr-form-hint { color: var(--text-muted); }
 .lrr-modal-actions { justify-content: flex-end; margin-top: 16px; }
+.lrr-modal-actions-stacked { flex-direction: column; align-items: stretch; }
 .lrr-opml-textarea { width: 100%; min-height: 220px; resize: vertical; }
 @media (max-width: 800px) {
   .lrr-body { grid-template-columns: 180px minmax(0, 1fr); }

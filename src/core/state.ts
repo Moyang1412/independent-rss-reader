@@ -12,8 +12,9 @@ function migratedObject(value: unknown): Record<string, unknown> {
   if (version < 1) data = { ...data, version: 1 };
   if (version < 2 || Object.hasOwn(data, 'dailyNoteFolder')) {
     const withoutLegacyDailyNote = Object.fromEntries(Object.entries(data).filter(([key]) => key !== 'dailyNoteFolder'));
-    data = { ...withoutLegacyDailyNote, version: CURRENT_STATE_VERSION };
+    data = { ...withoutLegacyDailyNote, version: 2 };
   }
+  if (version < 3) data = { ...data, version: CURRENT_STATE_VERSION, savedEntries: data.savedEntries || [] };
   return data;
 }
 
@@ -55,6 +56,11 @@ export const stateSchema = z.object({
     createdAt: z.number().default(0),
     model: z.string().default(''),
   })).default({}),
+  savedEntries: z.array(z.object({
+    id: z.string(), feedUrl: z.string(), title: z.string(), link: z.string().optional(), author: z.string().optional(),
+    summary: z.string().default(''), content: z.string().default(''), publishedAt: z.number().optional(),
+    publishedText: z.string().optional(), imageUrl: z.string().optional(),
+  })).default([]),
 });
 
 export function normalizeState(value: unknown): StoredState {
@@ -70,5 +76,6 @@ export function normalizeState(value: unknown): StoredState {
     query: parsed.query,
     deepseek: parsed.deepseek,
     aiSummaries: parsed.aiSummaries,
+    savedEntries: parsed.savedEntries,
   };
 }

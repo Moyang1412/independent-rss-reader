@@ -18,6 +18,7 @@ function migratedObject(value: unknown): Record<string, unknown> {
   if (version < 3) data = { ...data, version: CURRENT_STATE_VERSION, savedEntries: data.savedEntries || [] };
   if (version < 4) data = { ...data, version: CURRENT_STATE_VERSION, lastReadBySubscription: data.lastReadBySubscription || {} };
   if (version < 5) data = { ...data, version: CURRENT_STATE_VERSION, refresh: data.refresh || {}, lastRefresh: data.lastRefresh || {} };
+  if (version < 6) data = { ...data, version: CURRENT_STATE_VERSION, cache: data.cache || {} };
   return data;
 }
 
@@ -32,11 +33,12 @@ const subscriptionSchema = z.object({
   entries: z.array(z.object({
     id: z.string(), feedUrl: z.string(), title: z.string(), link: z.string().optional(), author: z.string().optional(),
     summary: z.string().default(''), content: z.string().default(''), publishedAt: z.number().optional(),
-    publishedText: z.string().optional(), imageUrl: z.string().optional(),
+    publishedText: z.string().optional(), imageUrl: z.string().optional(), cachedImages: z.record(z.string(), z.string()).optional(), cachedAt: z.number().optional(),
   })).default([]), updatedAt: z.number().default(0),
   lastAttemptAt: z.number().default(0), error: z.string().optional(), etag: z.string().optional(),
   lastModified: z.string().optional(), paused: z.boolean().default(false), site: z.string().optional(), image: z.string().optional(),
   refreshFailureCount: z.number().int().nonnegative().default(0), nextRetryAt: z.number().nonnegative().default(0), lastNewCount: z.number().int().nonnegative().default(0),
+  cacheLimit: z.number().int().min(1).max(10_000).default(50),
 });
 
 export const stateSchema = z.object({
@@ -57,6 +59,7 @@ export const stateSchema = z.object({
     startedAt: z.number().default(0), finishedAt: z.number().default(0), successCount: z.number().int().nonnegative().default(0),
     failedCount: z.number().int().nonnegative().default(0), skippedCount: z.number().int().nonnegative().default(0), newArticleCount: z.number().int().nonnegative().default(0),
   }).default({ startedAt: 0, finishedAt: 0, successCount: 0, failedCount: 0, skippedCount: 0, newArticleCount: 0 }),
+  cache: z.object({ cacheImages: z.boolean().default(true) }).default({ cacheImages: true }),
   query: z.string().default(''),
   deepseek: z.object({
     enabled: z.boolean().default(DEFAULT_DEEPSEEK_CONFIG.enabled),
@@ -73,7 +76,7 @@ export const stateSchema = z.object({
   savedEntries: z.array(z.object({
     id: z.string(), feedUrl: z.string(), title: z.string(), link: z.string().optional(), author: z.string().optional(),
     summary: z.string().default(''), content: z.string().default(''), publishedAt: z.number().optional(),
-    publishedText: z.string().optional(), imageUrl: z.string().optional(),
+    publishedText: z.string().optional(), imageUrl: z.string().optional(), cachedImages: z.record(z.string(), z.string()).optional(), cachedAt: z.number().optional(),
   })).default([]),
 });
 
@@ -90,6 +93,7 @@ export function normalizeState(value: unknown): StoredState {
     lastReadBySubscription: parsed.lastReadBySubscription,
     refresh: parsed.refresh,
     lastRefresh: parsed.lastRefresh,
+    cache: parsed.cache,
     query: parsed.query,
     deepseek: parsed.deepseek,
     aiSummaries: parsed.aiSummaries,

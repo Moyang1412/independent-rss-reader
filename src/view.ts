@@ -387,6 +387,11 @@ export class ReaderView extends ItemView {
     }
     const content = this.article.createDiv({ cls: 'lrr-article-content' });
     safeSetHtml(content, sanitizeArticleHtml(entry.content, entry.link || undefined));
+    for (const image of content.querySelectorAll<HTMLImageElement>('img[src]')) {
+      const remote = image.getAttribute('src') || '';
+      const cachedPath = entry.cachedImages?.[remote] || (entry.imageUrl ? entry.cachedImages?.[entry.imageUrl] : undefined);
+      if (cachedPath) image.src = this.app.vault.adapter.getResourcePath(cachedPath);
+    }
     if (cachedSummary) {
       const summary = this.article.createDiv({ cls: 'lrr-ai-summary' });
       summary.createEl('h3', { text: 'DeepSeek 摘要' });

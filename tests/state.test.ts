@@ -14,6 +14,7 @@ describe('state migrations', () => {
     expect(state.refresh.enabled).toBe(false);
     expect(state.refresh.intervalMinutes).toBe(30);
     expect(state.lastRefresh.newArticleCount).toBe(0);
+    expect(state.cache.cacheImages).toBe(true);
   });
 
   it('migrates legacy v1 data and removes the old daily note setting', () => {

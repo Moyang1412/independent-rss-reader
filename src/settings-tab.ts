@@ -41,6 +41,15 @@ export class ReaderSettingsTab extends PluginSettingTab {
     const lastRefresh = this.plugin.state.lastRefresh;
     new Setting(containerEl).setName('最近一次刷新').setDesc(lastRefresh.finishedAt ? `${new Date(lastRefresh.finishedAt).toLocaleString()}，成功 ${lastRefresh.successCount}，失败 ${lastRefresh.failedCount}，新增 ${lastRefresh.newArticleCount}` : '尚未刷新');
 
+    new Setting(containerEl).setName('离线缓存').setHeading();
+    containerEl.createEl('p', { text: '正文会随文章保存在本地。图片缓存写入插件目录，清理时会保留未读和收藏文章使用的图片。' });
+    new Setting(containerEl).setName('缓存图片').setDesc('关闭后保留正文缓存，但不再下载新的图片。').addToggle(toggle => {
+      toggle.setValue(this.plugin.state.cache.cacheImages).onChange(async value => {
+        this.plugin.state.cache.cacheImages = value;
+        await this.plugin.persist();
+      });
+    });
+
     new Setting(containerEl).setName('DeepSeek（可选）').setHeading();
     containerEl.createEl('p', { text: '配置后可在文章页面生成摘要、直接录音或选择音频进行语音搜索。录音会在本地编码为 16-bit PCM WAV；选择音频时支持 WAV、Ogg Opus，单个音频最多 8 MiB、120 秒。API Key 只保存在当前 Obsidian 库的插件数据中；不配置时，本地 RSS 阅读功能仍可正常使用。' });
     new Setting(containerEl).setName('启用 DeepSeek').setDesc('只影响摘要功能，不影响订阅、阅读、收藏和日记。').addToggle(toggle => {

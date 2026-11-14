@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0 — 2026-11-15
+
+Add offline article and image caching.
+
+### Included
+
+- Keep complete article bodies in the local subscription cache;
+- Download and reuse article images from the plugin cache directory;
+- Continue reading cached articles when a refresh fails or the network is unavailable;
+- Set a cache limit for each subscription;
+- Clean old article and image cache entries while protecting unread and favorite articles;
+- State migration to v6 for cache settings and cached image metadata.
+
 ## 0.4.0 — 2026-11-15
 
 Add controlled automatic refresh.

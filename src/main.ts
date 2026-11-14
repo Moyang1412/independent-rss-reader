@@ -1,4 +1,4 @@
-import { moment, Notice, Plugin, TFile, normalizePath } from 'obsidian';
+import { moment, Notice, Plugin, TFile, normalizePath, requestUrl } from 'obsidian';
 import { AddFeedModal } from './add-feed-modal';
 import { DeleteFeedModal } from './delete-feed-modal';
 import { EditFeedModal } from './edit-feed-modal';
@@ -9,6 +9,7 @@ import { exportOpml, normalizeFeedUrl, parseOpml } from './core/feed-parser';
 import { mergeSavedEntries, moveSubscription, shouldRefreshSubscription } from './core/subscriptions';
 import { markAllReadIds, pruneLastReadPositions } from './core/reading';
 import { countNewEntries, nextRetryAt, shouldAttemptSubscription } from './core/refresh';
+import { DEFAULT_CACHE_LIMIT, imageUrlsInEntry, mergeCachedEntries } from './core/cache';
 import { ImportOpmlModal } from './opml-modal';
 import { ReaderSettingsTab } from './settings-tab';
 import { READER_VIEW_TYPE, ReaderView } from './view';
@@ -94,6 +95,77 @@ export default class LocalRssPlugin extends Plugin {
 
   async persist() { await this.saveData(this.state); this.refreshViews(); }
 
+  private cacheImageDirectory() {
+    return normalizePath(`${this.manifest.dir}/cache/images`);
+  }
+
+  private async ensureCacheImageDirectory() {
+    const path = this.cacheImageDirectory();
+    const parent = normalizePath(path.split('/').slice(0, -1).join('/'));
+    if (parent && !(await this.app.vault.adapter.exists(parent))) await this.app.vault.adapter.mkdir(parent);
+    if (!(await this.app.vault.adapter.exists(path))) await this.app.vault.adapter.mkdir(path);
+    return path;
+  }
+
+  private imageExtension(url: string, contentType = '') {
+    const mime = contentType.split(';')[0].trim().toLowerCase();
+    const fromMime = mime.match(/^image\/(png|jpe?g|gif|webp|svg\+xml|avif)$/)?.[1];
+    if (fromMime) return fromMime === 'jpeg' ? 'jpg' : fromMime === 'svg+xml' ? 'svg' : fromMime;
+    try {
+      const ext = new URL(url).pathname.split('.').pop()?.toLowerCase();
+      if (ext && /^[a-z0-9]{1,5}$/.test(ext)) return ext;
+    } catch { /* Use a safe default. */ }
+    return 'bin';
+  }
+
+  private imageHash(value: string) {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) hash = Math.imul(hash ^ value.charCodeAt(index), 16777619);
+    return (hash >>> 0).toString(16).padStart(8, '0');
+  }
+
+  private async downloadCachedImage(url: string): Promise<string | undefined> {
+    try {
+      const response = await requestUrl({ url, method: 'GET', throw: false });
+      if (response.status < 200 || response.status >= 300 || response.arrayBuffer.byteLength > 10 * 1024 * 1024) return undefined;
+      const directory = await this.ensureCacheImageDirectory();
+      const path = normalizePath(`${directory}/${this.imageHash(url)}.${this.imageExtension(url, response.headers['content-type'] || response.headers['Content-Type'] || '')}`);
+      if (!(await this.app.vault.adapter.exists(path))) await this.app.vault.adapter.writeBinary(path, response.arrayBuffer);
+      return path;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async cacheEntries(entries: FeedEntry[], previous: FeedEntry[] = []) {
+    if (!this.state.cache.cacheImages) return entries.map(entry => ({ ...entry, cachedAt: Date.now() }));
+    const previousById = new Map(previous.map(entry => [entry.id, entry]));
+    return Promise.all(entries.map(async entry => {
+      const old = previousById.get(entry.id);
+      const cachedImages = { ...(old?.cachedImages || {}), ...(entry.cachedImages || {}) };
+      for (const url of imageUrlsInEntry(entry)) {
+        if (cachedImages[url] && await this.app.vault.adapter.exists(cachedImages[url])) continue;
+        const cachedPath = await this.downloadCachedImage(url);
+        if (cachedPath) cachedImages[url] = cachedPath;
+      }
+      return { ...entry, cachedImages, cachedAt: Date.now() };
+    }));
+  }
+
+  private protectedEntryIds(subscription: Subscription) {
+    return new Set(subscription.entries.filter(entry => !this.state.readIds.includes(entry.id) || this.state.favoriteIds.includes(entry.id)).map(entry => entry.id));
+  }
+
+  private async cleanupImageCache() {
+    const directory = this.cacheImageDirectory();
+    if (!(await this.app.vault.adapter.exists(directory))) return;
+    const referenced = new Set<string>();
+    for (const subscription of this.state.subscriptions) for (const entry of subscription.entries) for (const path of Object.values(entry.cachedImages || {})) referenced.add(path);
+    for (const entry of this.state.savedEntries) for (const path of Object.values(entry.cachedImages || {})) referenced.add(path);
+    const listed = await this.app.vault.adapter.list(directory);
+    for (const file of listed.files) if (!referenced.has(file)) await this.app.vault.adapter.remove(file);
+  }
+
   canUseDeepSeek() {
     return this.state.deepseek.enabled && Boolean(this.state.deepseek.apiKey.trim());
   }
@@ -157,11 +229,12 @@ export default class LocalRssPlugin extends Plugin {
   async addSubscription(rawUrl: string, requestedName = '', requestedGroup = '') {
     const result = await fetchFeed(rawUrl);
     if (this.state.subscriptions.some(subscription => subscription.url === result.url)) throw new Error('这个订阅已经存在');
+    const entries = await this.cacheEntries(result.feed.entries);
     const subscription: Subscription = {
       id: crypto.randomUUID(), url: result.url, name: requestedName.trim() || result.feed.title || new URL(result.url).hostname,
-      group: requestedGroup.trim(), site: result.feed.site, image: result.feed.image, entries: result.feed.entries,
+      group: requestedGroup.trim(), site: result.feed.site, image: result.feed.image, entries,
       updatedAt: Date.now(), lastAttemptAt: Date.now(), error: '', etag: result.etag, lastModified: result.lastModified,
-      paused: false,
+      paused: false, cacheLimit: DEFAULT_CACHE_LIMIT,
     };
     this.state.subscriptions.push(subscription);
     this.state.selectedSubscriptionId = subscription.id;
@@ -191,7 +264,7 @@ export default class LocalRssPlugin extends Plugin {
     await this.persist();
   }
 
-  async updateSubscription(id: string, rawUrl: string, requestedName = '', requestedGroup = '') {
+  async updateSubscription(id: string, rawUrl: string, requestedName = '', requestedGroup = '', requestedCacheLimit?: number) {
     const subscription = this.state.subscriptions.find(item => item.id === id);
     if (!subscription) throw new Error('订阅不存在');
     const url = normalizeFeedUrl(rawUrl);
@@ -200,7 +273,7 @@ export default class LocalRssPlugin extends Plugin {
     if (url !== subscription.url) {
       const result = await fetchFeed(url);
       subscription.url = result.url;
-      subscription.entries = result.feed.entries;
+      subscription.entries = await this.cacheEntries(result.feed.entries, subscription.entries);
       subscription.site = result.feed.site;
       subscription.image = result.feed.image;
       subscription.updatedAt = Date.now();
@@ -211,6 +284,9 @@ export default class LocalRssPlugin extends Plugin {
     }
     subscription.name = requestedName.trim() || subscription.name || new URL(url).hostname;
     subscription.group = requestedGroup.trim();
+    if (requestedCacheLimit !== undefined) subscription.cacheLimit = Math.max(1, Math.min(10_000, Math.round(requestedCacheLimit)));
+    subscription.entries = mergeCachedEntries(subscription.entries, [], subscription.cacheLimit || DEFAULT_CACHE_LIMIT, this.protectedEntryIds(subscription));
+    await this.cleanupImageCache();
     await this.persist();
   }
 
@@ -231,7 +307,8 @@ export default class LocalRssPlugin extends Plugin {
     try {
       const previousEntries = subscription.entries;
       const result = await fetchFeed(subscription.url, subscription);
-      subscription.entries = result.feed.entries;
+      const incomingEntries = await this.cacheEntries(result.feed.entries, previousEntries);
+      subscription.entries = mergeCachedEntries(previousEntries, incomingEntries, subscription.cacheLimit || DEFAULT_CACHE_LIMIT, this.protectedEntryIds(subscription));
       subscription.site = result.feed.site;
       subscription.image = result.feed.image;
       subscription.updatedAt = Date.now();
@@ -240,7 +317,7 @@ export default class LocalRssPlugin extends Plugin {
       subscription.lastModified = result.lastModified;
       subscription.refreshFailureCount = 0;
       subscription.nextRetryAt = 0;
-      subscription.lastNewCount = countNewEntries(previousEntries, result.feed.entries);
+      subscription.lastNewCount = countNewEntries(previousEntries, incomingEntries);
       return { success: true, newCount: subscription.lastNewCount, skipped: false };
     } catch (error) {
       if (error instanceof Error && error.message === 'NOT_MODIFIED') {
@@ -267,6 +344,7 @@ export default class LocalRssPlugin extends Plugin {
     const notice = new Notice(`正在刷新“${subscription.name}”…`, 0);
     const result = await this.refreshSubscription(subscription, false);
     if (result.skipped && subscription.paused) { notice.hide(); new Notice('这个订阅已暂停'); return; }
+    await this.cleanupImageCache();
     await this.persist();
     notice.hide();
     if (result.success && result.newCount) new Notice(`已刷新“${subscription.name}”，发现 ${result.newCount} 篇新文章`);
@@ -340,6 +418,7 @@ export default class LocalRssPlugin extends Plugin {
       else failed++;
     }
     this.state.lastRefresh = { startedAt, finishedAt: Date.now(), successCount: success, failedCount: failed, skippedCount: skipped, newArticleCount };
+    await this.cleanupImageCache();
     await this.persist();
     notice?.hide();
     if (automatic) {

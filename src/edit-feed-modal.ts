@@ -6,12 +6,14 @@ export class EditFeedModal extends Modal {
   private url: string;
   private name: string;
   private group: string;
+  private cacheLimit: string;
 
   constructor(private readonly plugin: LocalRssPlugin, private readonly subscription: Subscription) {
     super(plugin.app);
     this.url = subscription.url;
     this.name = subscription.name;
     this.group = subscription.group;
+    this.cacheLimit = String(subscription.cacheLimit || 50);
   }
 
   override onOpen() {
@@ -28,12 +30,21 @@ export class EditFeedModal extends Modal {
     new Setting(this.contentEl).setName('分组').setDesc('可留空。').addText(text => {
       text.setValue(this.group).onChange(value => { this.group = value; });
     });
+    new Setting(this.contentEl).setName('缓存上限').setDesc('保留的文章数量，范围为 1 到 10000。未读和收藏文章会优先保留。').addText(text => {
+      text.setValue(this.cacheLimit).onChange(value => { this.cacheLimit = value; });
+    });
     const buttons = this.contentEl.createDiv({ cls: 'lrr-modal-actions' });
     buttons.createEl('button', { text: '取消', attr: { type: 'button' } }).onclick = () => this.close();
     const submit = buttons.createEl('button', { text: '保存', cls: 'mod-cta', attr: { type: 'button' } });
     submit.onclick = () => {
       submit.disabled = true;
-      void this.plugin.updateSubscription(this.subscription.id, this.url, this.name, this.group).then(() => this.close()).catch(error => {
+      const limit = Number(this.cacheLimit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 10_000) {
+        submit.disabled = false;
+        new Notice('缓存上限必须是 1 到 10000 的整数');
+        return;
+      }
+      void this.plugin.updateSubscription(this.subscription.id, this.url, this.name, this.group, limit).then(() => this.close()).catch(error => {
         submit.disabled = false;
         new Notice(error instanceof Error ? error.message : '订阅保存失败');
       });

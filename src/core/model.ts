@@ -1,6 +1,6 @@
 import type { DeepSeekConfig } from '../ai/deepseek';
 
-export const CURRENT_STATE_VERSION = 6 as const;
+export const CURRENT_STATE_VERSION = 7 as const;
 export const SAVED_ENTRIES_SUBSCRIPTION_ID = '__saved_entries__';
 
 export type FeedFormat = 'rss' | 'rdf' | 'atom';
@@ -70,6 +70,19 @@ export interface CacheConfig {
   cacheImages: boolean;
 }
 
+export interface ArticleKnowledge {
+  tags: string[];
+  note: string;
+  savedPath?: string;
+  savedAt?: number;
+}
+
+export interface KnowledgeConfig {
+  saveFolder: string;
+  saveTemplate: string;
+  dailyNoteTemplate: string;
+}
+
 export interface OpmlFeed {
   url: string;
   name: string;
@@ -88,6 +101,8 @@ export interface StoredState {
   refresh: RefreshConfig;
   lastRefresh: RefreshSummary;
   cache: CacheConfig;
+  articleKnowledge: Record<string, ArticleKnowledge>;
+  knowledge: KnowledgeConfig;
   query: string;
   deepseek: DeepSeekConfig;
   aiSummaries: Record<string, AiSummary>;

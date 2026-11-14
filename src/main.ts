@@ -2,6 +2,7 @@ import { moment, Notice, Plugin, TFile, normalizePath, requestUrl } from 'obsidi
 import { AddFeedModal } from './add-feed-modal';
 import { DeleteFeedModal } from './delete-feed-modal';
 import { EditFeedModal } from './edit-feed-modal';
+import { ArticleKnowledgeModal } from './article-knowledge-modal';
 import { fetchFeed } from './feed-service';
 import { needsStateMigration, normalizeState } from './core/state';
 import { SAVED_ENTRIES_SUBSCRIPTION_ID, type FeedEntry, type Subscription, type StoredState } from './core/model';
@@ -10,6 +11,7 @@ import { mergeSavedEntries, moveSubscription, shouldRefreshSubscription } from '
 import { markAllReadIds, pruneLastReadPositions } from './core/reading';
 import { countNewEntries, nextRetryAt, shouldAttemptSubscription } from './core/refresh';
 import { DEFAULT_CACHE_LIMIT, imageUrlsInEntry, mergeCachedEntries } from './core/cache';
+import { articleFilename, isAlreadySaved, markArticleSaved, normalizeTags, renderDailyNoteEntry, renderTemplate, safeVaultPath, templateVariables, updateArticleKnowledge } from './core/knowledge';
 import { ImportOpmlModal } from './opml-modal';
 import { ReaderSettingsTab } from './settings-tab';
 import { READER_VIEW_TYPE, ReaderView } from './view';
@@ -92,6 +94,7 @@ export default class LocalRssPlugin extends Plugin {
     if (subscription) new EditFeedModal(this, subscription).open();
   }
   openImportOpml() { new ImportOpmlModal(this).open(); }
+  openArticleKnowledge(entry: FeedEntry) { new ArticleKnowledgeModal(this, entry).open(); }
 
   async persist() { await this.saveData(this.state); this.refreshViews(); }
 
@@ -172,6 +175,38 @@ export default class LocalRssPlugin extends Plugin {
 
   getCachedSummary(entryId: string) {
     return this.state.aiSummaries[entryId]?.text || '';
+  }
+
+  getArticleKnowledge(entryId: string) {
+    return this.state.articleKnowledge[entryId] || { tags: [], note: '' };
+  }
+
+  async updateArticleKnowledge(entryId: string, tags: readonly string[], note: string) {
+    this.state.articleKnowledge = updateArticleKnowledge(this.state.articleKnowledge, entryId, { tags: normalizeTags(tags), note });
+    await this.persist();
+  }
+
+  private sourceNameForEntry(entry: FeedEntry) {
+    return this.state.subscriptions.find(subscription => subscription.entries.some(item => item.id === entry.id))?.name || entry.feedUrl;
+  }
+
+  async saveEntryAsMarkdown(entry: FeedEntry) {
+    const knowledge = this.getArticleKnowledge(entry.id);
+    const path = safeVaultPath(this.state.knowledge.saveFolder, articleFilename(entry));
+    if (isAlreadySaved(this.state.articleKnowledge, entry.id, path)) {
+      new Notice(`文章已经保存：${path}`);
+      return path;
+    }
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    if (existing) throw new Error(`目标笔记已存在：${path}`);
+    const parent = path.split('/').slice(0, -1).join('/');
+    if (parent) await this.ensureFolder(parent);
+    const content = renderTemplate(this.state.knowledge.saveTemplate, templateVariables(entry, this.sourceNameForEntry(entry), knowledge));
+    await this.app.vault.create(path, content.endsWith('\n') ? content : `${content}\n`);
+    this.state.articleKnowledge = markArticleSaved(this.state.articleKnowledge, entry.id, path);
+    await this.persist();
+    new Notice(`已保存文章：${path}`);
+    return path;
   }
 
   async summarizeEntry(entry: FeedEntry) {
@@ -472,12 +507,14 @@ export default class LocalRssPlugin extends Plugin {
     const path = normalizePath(folder ? `${folder}/${filename}` : filename);
     const parent = path.split('/').slice(0, -1).join('/');
     if (parent) await this.ensureFolder(parent);
-    const title = entry.title.replaceAll('[', '').replaceAll(']', '');
-    const line = `- [${title}](${entry.link || ''})\n`;
+    const knowledge = this.getArticleKnowledge(entry.id);
+    const line = renderDailyNoteEntry({ entry, source: this.sourceNameForEntry(entry), tags: knowledge.tags, note: knowledge.note }, this.state.knowledge.dailyNoteTemplate);
+    const marker = `<!-- independent-rss-reader:${entry.id} -->`;
+    const block = `${marker}\n${line}`;
     const file = this.app.vault.getAbstractFileByPath(path);
     if (file instanceof TFile) {
       const current = await this.app.vault.read(file);
-      if (!current.includes(line.trim())) await this.app.vault.modify(file, current.endsWith('\n') ? current + line : `${current}\n${line}`);
+      if (!current.includes(marker) && !current.includes(line.trim())) await this.app.vault.modify(file, current.endsWith('\n') ? current + block : `${current}\n${block}`);
     } else {
       let content = '';
       if (options.template) {
@@ -485,7 +522,7 @@ export default class LocalRssPlugin extends Plugin {
         if (template instanceof TFile) content = await this.app.vault.read(template);
       }
       if (content && !content.endsWith('\n')) content += '\n';
-      await this.app.vault.create(path, content + line);
+      await this.app.vault.create(path, content + block);
     }
   }
 }

@@ -354,6 +354,9 @@ export class ReaderView extends ItemView {
     if (source) meta.createSpan({ text: `来源：${source}`, attr: { title: source } });
     if (entry.author) meta.createSpan({ text: entry.author });
     if (entry.publishedAt) meta.createSpan({ text: new Date(entry.publishedAt).toLocaleString() });
+    const knowledge = this.plugin.getArticleKnowledge(entry.id);
+    if (knowledge.tags.length) meta.createSpan({ text: `标签：${knowledge.tags.map(tag => `#${tag}`).join(' ')}` });
+    if (knowledge.note) meta.createSpan({ text: `备注：${knowledge.note}`, attr: { title: knowledge.note } });
     const actions = head.createDiv({ cls: 'lrr-article-actions' });
     const previousId = adjacentEntryId(this.visibleEntries(), entry.id, -1);
     const previous = actions.createEl('button', { text: '上一篇', attr: { type: 'button' } });
@@ -367,6 +370,11 @@ export class ReaderView extends ItemView {
     favorite.onclick = () => { this.plugin.toggleFavorite(entry.id); this.render(); };
     const later = actions.createEl('button', { text: this.plugin.state.laterIds.includes(entry.id) ? '移出稍后读' : '稍后读', attr: { type: 'button' } });
     later.onclick = () => { this.plugin.toggleLater(entry.id); this.render(); };
+    const metaButton = actions.createEl('button', { text: knowledge.tags.length || knowledge.note ? '编辑标签/备注' : '标签/备注', attr: { type: 'button' } });
+    metaButton.onclick = () => this.plugin.openArticleKnowledge(entry);
+    const saveButton = actions.createEl('button', { text: knowledge.savedPath ? '已保存文章' : '保存为 Markdown', attr: { type: 'button' } });
+    saveButton.disabled = Boolean(knowledge.savedPath);
+    saveButton.onclick = () => { void this.plugin.saveEntryAsMarkdown(entry).catch(error => new Notice(error instanceof Error ? error.message : '保存文章失败')); };
     const cachedSummary = this.plugin.getCachedSummary(entry.id);
     const summarize = actions.createEl('button', { text: cachedSummary ? '已生成摘要' : '生成摘要', attr: { type: 'button' } });
     summarize.disabled = !cachedSummary && !this.plugin.canUseDeepSeek();

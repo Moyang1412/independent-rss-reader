@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { CURRENT_STATE_VERSION, type StoredState } from './model';
 import { DEFAULT_DEEPSEEK_CONFIG } from '../ai/deepseek';
 import { DEFAULT_REFRESH_INTERVAL_MINUTES } from './refresh';
+import { DEFAULT_DAILY_NOTE_TEMPLATE, DEFAULT_SAVE_FOLDER, DEFAULT_SAVE_TEMPLATE } from './knowledge';
 
 const rawStateSchema = z.looseObject({ version: z.number().int().nonnegative().optional() });
 
@@ -19,6 +20,7 @@ function migratedObject(value: unknown): Record<string, unknown> {
   if (version < 4) data = { ...data, version: CURRENT_STATE_VERSION, lastReadBySubscription: data.lastReadBySubscription || {} };
   if (version < 5) data = { ...data, version: CURRENT_STATE_VERSION, refresh: data.refresh || {}, lastRefresh: data.lastRefresh || {} };
   if (version < 6) data = { ...data, version: CURRENT_STATE_VERSION, cache: data.cache || {} };
+  if (version < 7) data = { ...data, version: CURRENT_STATE_VERSION, articleKnowledge: data.articleKnowledge || {} };
   return data;
 }
 
@@ -60,6 +62,17 @@ export const stateSchema = z.object({
     failedCount: z.number().int().nonnegative().default(0), skippedCount: z.number().int().nonnegative().default(0), newArticleCount: z.number().int().nonnegative().default(0),
   }).default({ startedAt: 0, finishedAt: 0, successCount: 0, failedCount: 0, skippedCount: 0, newArticleCount: 0 }),
   cache: z.object({ cacheImages: z.boolean().default(true) }).default({ cacheImages: true }),
+  articleKnowledge: z.record(z.string(), z.object({
+    tags: z.array(z.string()).default([]),
+    note: z.string().default(''),
+    savedPath: z.string().optional(),
+    savedAt: z.number().optional(),
+  })).default({}),
+  knowledge: z.object({
+    saveFolder: z.string().default(DEFAULT_SAVE_FOLDER),
+    saveTemplate: z.string().default(DEFAULT_SAVE_TEMPLATE),
+    dailyNoteTemplate: z.string().default(DEFAULT_DAILY_NOTE_TEMPLATE),
+  }).default({ saveFolder: DEFAULT_SAVE_FOLDER, saveTemplate: DEFAULT_SAVE_TEMPLATE, dailyNoteTemplate: DEFAULT_DAILY_NOTE_TEMPLATE }),
   query: z.string().default(''),
   deepseek: z.object({
     enabled: z.boolean().default(DEFAULT_DEEPSEEK_CONFIG.enabled),
@@ -94,6 +107,8 @@ export function normalizeState(value: unknown): StoredState {
     refresh: parsed.refresh,
     lastRefresh: parsed.lastRefresh,
     cache: parsed.cache,
+    articleKnowledge: parsed.articleKnowledge,
+    knowledge: parsed.knowledge,
     query: parsed.query,
     deepseek: parsed.deepseek,
     aiSummaries: parsed.aiSummaries,

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0 — 2026-11-15
+
+Add local knowledge organization for RSS articles.
+
+### Included
+
+- Add article tags and notes with local persistence;
+- Show saved tags and notes in the article reading view;
+- Save an article as Markdown in a configurable vault-relative folder;
+- Support custom article save templates and Daily Note insertion formats;
+- Provide template variables for title, source, author, publication time, link, summary, Markdown body, tags, and notes;
+- Record the saved path and prevent saving the same article twice;
+- Sanitize entry IDs when generating filenames so local IDs such as `local:...` remain valid vault paths;
+- State migration to v7 for article knowledge and save settings.
+
 ## 0.5.0 — 2026-11-15
 
 Add offline article and image caching.

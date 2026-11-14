@@ -50,6 +50,27 @@ export class ReaderSettingsTab extends PluginSettingTab {
       });
     });
 
+    new Setting(containerEl).setName('知识整理').setHeading();
+    containerEl.createEl('p', { text: '保存模板变量：{{title}}、{{source}}、{{author}}、{{publishedAt}}、{{link}}、{{summary}}、{{content}}、{{tags}}、{{note}}。' });
+    new Setting(containerEl).setName('文章保存文件夹').setDesc('相对于库根目录的 Markdown 文件夹。').addText(text => {
+      text.setValue(this.plugin.state.knowledge.saveFolder).onChange(async value => {
+        this.plugin.state.knowledge.saveFolder = value.trim();
+        await this.plugin.persist();
+      });
+    });
+    new Setting(containerEl).setName('文章保存模板').addTextArea(text => {
+      text.setValue(this.plugin.state.knowledge.saveTemplate).onChange(async value => {
+        this.plugin.state.knowledge.saveTemplate = value;
+        await this.plugin.persist();
+      });
+    });
+    new Setting(containerEl).setName('Daily Note 插入格式').setDesc('支持 {{title}}、{{source}}、{{publishedAt}}、{{link}}、{{tags}}、{{note}}。').addText(text => {
+      text.setValue(this.plugin.state.knowledge.dailyNoteTemplate).onChange(async value => {
+        this.plugin.state.knowledge.dailyNoteTemplate = value;
+        await this.plugin.persist();
+      });
+    });
+
     new Setting(containerEl).setName('DeepSeek（可选）').setHeading();
     containerEl.createEl('p', { text: '配置后可在文章页面生成摘要、直接录音或选择音频进行语音搜索。录音会在本地编码为 16-bit PCM WAV；选择音频时支持 WAV、Ogg Opus，单个音频最多 8 MiB、120 秒。API Key 只保存在当前 Obsidian 库的插件数据中；不配置时，本地 RSS 阅读功能仍可正常使用。' });
     new Setting(containerEl).setName('启用 DeepSeek').setDesc('只影响摘要功能，不影响订阅、阅读、收藏和日记。').addToggle(toggle => {

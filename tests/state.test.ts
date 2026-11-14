@@ -15,6 +15,9 @@ describe('state migrations', () => {
     expect(state.refresh.intervalMinutes).toBe(30);
     expect(state.lastRefresh.newArticleCount).toBe(0);
     expect(state.cache.cacheImages).toBe(true);
+    expect(state.articleKnowledge).toEqual({});
+    expect(state.knowledge.saveFolder).toBe('RSS Articles');
+    expect(state.knowledge.dailyNoteTemplate).toContain('{{title}}');
   });
 
   it('migrates legacy v1 data and removes the old daily note setting', () => {
@@ -26,10 +29,12 @@ describe('state migrations', () => {
   });
 
   it('preserves current optional data while migrating the version', () => {
-    const state = normalizeState({ version: 1, deepseek: { enabled: true, apiKey: 'secret' }, aiSummaries: { one: { text: '摘要', createdAt: 1, model: 'deepseek-flash' } }, lastReadBySubscription: { feedA: 'entry-1' } });
+    const state = normalizeState({ version: 1, deepseek: { enabled: true, apiKey: 'secret' }, aiSummaries: { one: { text: '摘要', createdAt: 1, model: 'deepseek-flash' } }, lastReadBySubscription: { feedA: 'entry-1' }, articleKnowledge: { one: { tags: ['rss'], note: '稍后整理', savedPath: 'RSS/one.md', savedAt: 1 } }, knowledge: { saveFolder: 'Clips', saveTemplate: '# {{title}}', dailyNoteTemplate: '- {{title}}' } });
     expect(state.deepseek.enabled).toBe(true);
     expect(state.aiSummaries.one.text).toBe('摘要');
     expect(state.lastReadBySubscription).toEqual({ feedA: 'entry-1' });
+    expect(state.articleKnowledge.one.savedPath).toBe('RSS/one.md');
+    expect(state.knowledge.saveFolder).toBe('Clips');
   });
 
   it('rejects data from a future version', () => {

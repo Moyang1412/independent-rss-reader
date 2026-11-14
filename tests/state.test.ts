@@ -11,6 +11,9 @@ describe('state migrations', () => {
     expect(state.aiSummaries).toEqual({});
     expect(state.savedEntries).toEqual([]);
     expect(state.lastReadBySubscription).toEqual({});
+    expect(state.refresh.enabled).toBe(false);
+    expect(state.refresh.intervalMinutes).toBe(30);
+    expect(state.lastRefresh.newArticleCount).toBe(0);
   });
 
   it('migrates legacy v1 data and removes the old daily note setting', () => {

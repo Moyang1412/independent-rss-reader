@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CURRENT_STATE_VERSION, type StoredState } from './model';
 import { DEFAULT_DEEPSEEK_CONFIG } from '../ai/deepseek';
+import { DEFAULT_REFRESH_INTERVAL_MINUTES } from './refresh';
 
 const rawStateSchema = z.looseObject({ version: z.number().int().nonnegative().optional() });
 
@@ -16,6 +17,7 @@ function migratedObject(value: unknown): Record<string, unknown> {
   }
   if (version < 3) data = { ...data, version: CURRENT_STATE_VERSION, savedEntries: data.savedEntries || [] };
   if (version < 4) data = { ...data, version: CURRENT_STATE_VERSION, lastReadBySubscription: data.lastReadBySubscription || {} };
+  if (version < 5) data = { ...data, version: CURRENT_STATE_VERSION, refresh: data.refresh || {}, lastRefresh: data.lastRefresh || {} };
   return data;
 }
 
@@ -34,6 +36,7 @@ const subscriptionSchema = z.object({
   })).default([]), updatedAt: z.number().default(0),
   lastAttemptAt: z.number().default(0), error: z.string().optional(), etag: z.string().optional(),
   lastModified: z.string().optional(), paused: z.boolean().default(false), site: z.string().optional(), image: z.string().optional(),
+  refreshFailureCount: z.number().int().nonnegative().default(0), nextRetryAt: z.number().nonnegative().default(0), lastNewCount: z.number().int().nonnegative().default(0),
 });
 
 export const stateSchema = z.object({
@@ -45,6 +48,15 @@ export const stateSchema = z.object({
   selectedSubscriptionId: z.string().default(''),
   selectedEntryId: z.string().default(''),
   lastReadBySubscription: z.record(z.string(), z.string()).default({}),
+  refresh: z.object({
+    enabled: z.boolean().default(false),
+    intervalMinutes: z.number().int().min(1).max(1_440).default(DEFAULT_REFRESH_INTERVAL_MINUTES),
+    refreshOnOpen: z.boolean().default(false),
+  }).default({ enabled: false, intervalMinutes: DEFAULT_REFRESH_INTERVAL_MINUTES, refreshOnOpen: false }),
+  lastRefresh: z.object({
+    startedAt: z.number().default(0), finishedAt: z.number().default(0), successCount: z.number().int().nonnegative().default(0),
+    failedCount: z.number().int().nonnegative().default(0), skippedCount: z.number().int().nonnegative().default(0), newArticleCount: z.number().int().nonnegative().default(0),
+  }).default({ startedAt: 0, finishedAt: 0, successCount: 0, failedCount: 0, skippedCount: 0, newArticleCount: 0 }),
   query: z.string().default(''),
   deepseek: z.object({
     enabled: z.boolean().default(DEFAULT_DEEPSEEK_CONFIG.enabled),
@@ -76,6 +88,8 @@ export function normalizeState(value: unknown): StoredState {
     selectedSubscriptionId: parsed.selectedSubscriptionId,
     selectedEntryId: parsed.selectedEntryId,
     lastReadBySubscription: parsed.lastReadBySubscription,
+    refresh: parsed.refresh,
+    lastRefresh: parsed.lastRefresh,
     query: parsed.query,
     deepseek: parsed.deepseek,
     aiSummaries: parsed.aiSummaries,

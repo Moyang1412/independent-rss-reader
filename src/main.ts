@@ -8,6 +8,7 @@ import { SAVED_ENTRIES_SUBSCRIPTION_ID, type FeedEntry, type Subscription, type 
 import { exportOpml, normalizeFeedUrl, parseOpml } from './core/feed-parser';
 import { mergeSavedEntries, moveSubscription, shouldRefreshSubscription } from './core/subscriptions';
 import { markAllReadIds, pruneLastReadPositions } from './core/reading';
+import { countNewEntries, nextRetryAt, shouldAttemptSubscription } from './core/refresh';
 import { ImportOpmlModal } from './opml-modal';
 import { ReaderSettingsTab } from './settings-tab';
 import { READER_VIEW_TYPE, ReaderView } from './view';
@@ -19,6 +20,8 @@ function unique(values: string[]) { return [...new Set(values)]; }
 
 export default class LocalRssPlugin extends Plugin {
   state!: StoredState;
+  private refreshTimer?: number;
+  private readonly refreshing = new Set<string>();
 
   override async onload() {
     const raw: unknown = await this.loadData();
@@ -56,6 +59,23 @@ export default class LocalRssPlugin extends Plugin {
     this.addCommand({ id: 'import-opml', name: '导入 OPML', callback: () => this.openImportOpml() });
     this.addCommand({ id: 'export-opml', name: '导出 OPML', callback: () => { void this.exportSubscriptions(); } });
     this.addSettingTab(new ReaderSettingsTab(this.app, this));
+    this.app.workspace.onLayoutReady(() => {
+      if (this.state.refresh.refreshOnOpen) void this.refreshSubscriptions({ automatic: true, reason: 'open' });
+      this.restartRefreshScheduler();
+    });
+  }
+
+  override onunload() {
+    if (this.refreshTimer !== undefined) window.clearInterval(this.refreshTimer);
+    this.refreshTimer = undefined;
+  }
+
+  restartRefreshScheduler() {
+    if (this.refreshTimer !== undefined) window.clearInterval(this.refreshTimer);
+    this.refreshTimer = undefined;
+    if (!this.state.refresh.enabled) return;
+    const intervalMs = Math.max(1, this.state.refresh.intervalMinutes) * 60_000;
+    this.refreshTimer = window.setInterval(() => { void this.refreshSubscriptions({ automatic: true, reason: 'interval' }); }, intervalMs);
   }
 
   async openReader() {
@@ -201,9 +221,15 @@ export default class LocalRssPlugin extends Plugin {
     await this.persist();
   }
 
-  private async refreshSubscription(subscription: Subscription) {
+  private async refreshSubscription(subscription: Subscription, automatic = false) {
+    const now = Date.now();
+    if (!shouldAttemptSubscription(subscription, automatic, now) || this.refreshing.has(subscription.id)) {
+      return { success: false, newCount: 0, skipped: true };
+    }
+    this.refreshing.add(subscription.id);
     subscription.lastAttemptAt = Date.now();
     try {
+      const previousEntries = subscription.entries;
       const result = await fetchFeed(subscription.url, subscription);
       subscription.entries = result.feed.entries;
       subscription.site = result.feed.site;
@@ -212,14 +238,25 @@ export default class LocalRssPlugin extends Plugin {
       subscription.error = '';
       subscription.etag = result.etag;
       subscription.lastModified = result.lastModified;
-      return true;
+      subscription.refreshFailureCount = 0;
+      subscription.nextRetryAt = 0;
+      subscription.lastNewCount = countNewEntries(previousEntries, result.feed.entries);
+      return { success: true, newCount: subscription.lastNewCount, skipped: false };
     } catch (error) {
       if (error instanceof Error && error.message === 'NOT_MODIFIED') {
         subscription.error = '';
-        return true;
+        subscription.refreshFailureCount = 0;
+        subscription.nextRetryAt = 0;
+        subscription.lastNewCount = 0;
+        return { success: true, newCount: 0, skipped: false };
       }
       subscription.error = error instanceof Error ? error.message : '刷新失败';
-      return false;
+      subscription.refreshFailureCount = (subscription.refreshFailureCount || 0) + 1;
+      subscription.nextRetryAt = nextRetryAt(Date.now(), subscription.refreshFailureCount);
+      subscription.lastNewCount = 0;
+      return { success: false, newCount: 0, skipped: false };
+    } finally {
+      this.refreshing.delete(subscription.id);
     }
   }
 
@@ -228,10 +265,16 @@ export default class LocalRssPlugin extends Plugin {
     if (!subscription) return;
     if (subscription.paused) { new Notice('这个订阅已暂停'); return; }
     const notice = new Notice(`正在刷新“${subscription.name}”…`, 0);
-    const success = await this.refreshSubscription(subscription);
+    const result = await this.refreshSubscription(subscription, false);
+    if (result.skipped && subscription.paused) { notice.hide(); new Notice('这个订阅已暂停'); return; }
     await this.persist();
     notice.hide();
-    new Notice(success ? `已刷新“${subscription.name}”` : `刷新失败：${subscription.error || '未知错误'}`);
+    if (result.success && result.newCount) new Notice(`已刷新“${subscription.name}”，发现 ${result.newCount} 篇新文章`);
+    else if (result.success) new Notice(`已刷新“${subscription.name}”`);
+    else {
+      const retry = subscription.nextRetryAt ? `，将在 ${new Date(subscription.nextRetryAt).toLocaleTimeString()} 后重试` : '';
+      new Notice(`刷新失败：${subscription.error || '未知错误'}${retry}`);
+    }
   }
 
   async markAllRead() {
@@ -280,19 +323,33 @@ export default class LocalRssPlugin extends Plugin {
     new Notice(`已导出 OPML：${path}`);
   }
 
-  async refreshSubscriptions() {
-    if (!this.state.subscriptions.length) { new Notice('还没有订阅'); return; }
-    const notice = new Notice('正在刷新订阅…', 0);
+  async refreshSubscriptions(options: { automatic?: boolean; reason?: 'open' | 'interval' } = {}) {
+    if (!this.state.subscriptions.length) { if (!options.automatic) new Notice('还没有订阅'); return; }
+    const automatic = options.automatic === true;
+    const notice = automatic ? undefined : new Notice('正在刷新订阅…', 0);
     let success = 0;
     let skipped = 0;
+    let failed = 0;
+    let newArticleCount = 0;
+    const startedAt = Date.now();
     for (const subscription of this.state.subscriptions) {
       if (!shouldRefreshSubscription(subscription)) { skipped++; continue; }
-      if (await this.refreshSubscription(subscription)) success++;
+      const result = await this.refreshSubscription(subscription, automatic);
+      if (result.skipped) { skipped++; continue; }
+      if (result.success) { success++; newArticleCount += result.newCount; }
+      else failed++;
     }
+    this.state.lastRefresh = { startedAt, finishedAt: Date.now(), successCount: success, failedCount: failed, skippedCount: skipped, newArticleCount };
     await this.persist();
-    notice.hide();
+    notice?.hide();
+    if (automatic) {
+      if (newArticleCount) new Notice(`发现 ${newArticleCount} 篇新文章`);
+      return;
+    }
     const suffix = skipped ? `，跳过 ${skipped} 个已暂停订阅` : '';
-    new Notice(`已刷新 ${success}/${this.state.subscriptions.length} 个订阅${suffix}`);
+    const failureSuffix = failed ? `，失败 ${failed} 个` : '';
+    const newSuffix = newArticleCount ? `，新增 ${newArticleCount} 篇文章` : '';
+    new Notice(`已刷新 ${success}/${this.state.subscriptions.length} 个订阅${suffix}${failureSuffix}${newSuffix}`);
   }
 
   toggleFavorite(id: string) {

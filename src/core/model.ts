@@ -1,6 +1,6 @@
 import type { DeepSeekConfig } from '../ai/deepseek';
 
-export const CURRENT_STATE_VERSION = 4 as const;
+export const CURRENT_STATE_VERSION = 5 as const;
 export const SAVED_ENTRIES_SUBSCRIPTION_ID = '__saved_entries__';
 
 export type FeedFormat = 'rss' | 'rdf' | 'atom';
@@ -41,8 +41,26 @@ export interface Subscription {
   etag?: string;
   lastModified?: string;
   paused?: boolean;
+  refreshFailureCount?: number;
+  nextRetryAt?: number;
+  lastNewCount?: number;
   site?: string;
   image?: string;
+}
+
+export interface RefreshConfig {
+  enabled: boolean;
+  intervalMinutes: number;
+  refreshOnOpen: boolean;
+}
+
+export interface RefreshSummary {
+  startedAt: number;
+  finishedAt: number;
+  successCount: number;
+  failedCount: number;
+  skippedCount: number;
+  newArticleCount: number;
 }
 
 export interface OpmlFeed {
@@ -60,6 +78,8 @@ export interface StoredState {
   selectedSubscriptionId?: string;
   selectedEntryId?: string;
   lastReadBySubscription: Record<string, string>;
+  refresh: RefreshConfig;
+  lastRefresh: RefreshSummary;
   query: string;
   deepseek: DeepSeekConfig;
   aiSummaries: Record<string, AiSummary>;

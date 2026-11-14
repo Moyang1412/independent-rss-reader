@@ -158,8 +158,12 @@ export class ReaderView extends ItemView {
         const meta = row.createSpan({ cls: 'lrr-source-meta' });
         meta.createSpan({ text: `${unread} 未读`, cls: 'lrr-source-unread' });
         if (subscription.paused) meta.createSpan({ text: '已暂停', cls: 'lrr-source-state' });
-        else if (subscription.error) meta.createSpan({ text: '更新失败', cls: 'lrr-source-error', attr: { title: subscription.error } });
+        else if (subscription.error) {
+          const retryText = subscription.nextRetryAt ? `，${new Date(subscription.nextRetryAt).toLocaleTimeString()} 重试` : '';
+          meta.createSpan({ text: '更新失败', cls: 'lrr-source-error', attr: { title: `${subscription.error}${retryText}` } });
+        }
         else if (subscription.updatedAt) meta.createSpan({ text: new Date(subscription.updatedAt).toLocaleDateString(), cls: 'lrr-source-date' });
+        if ((subscription.lastNewCount || 0) > 0) meta.createSpan({ text: `${subscription.lastNewCount} 新`, cls: 'lrr-source-new' });
         row.onclick = () => {
           this.plugin.state.selectedSubscriptionId = subscription.id;
           const lastReadId = getLastReadPosition(this.plugin.state.lastReadBySubscription, subscription.id);

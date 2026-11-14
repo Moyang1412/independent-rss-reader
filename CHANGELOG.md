@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 — 2026-11-15
+
+Add controlled automatic refresh.
+
+### Included
+
+- Optional background refresh with a configurable interval;
+- Optional refresh when Obsidian finishes opening the vault;
+- Paused subscriptions are skipped by automatic refresh;
+- New article count notices after successful refreshes;
+- Failure counts with exponential retry backoff from 5 minutes up to 6 hours;
+- Shared refresh status for manual, open-time, and scheduled refreshes;
+- State migration to v5 for refresh settings and refresh summaries.
+
 ## 0.3.0 — 2026-11-15
 
 Complete the remaining first reading-efficiency features.

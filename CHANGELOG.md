@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.1 — 2026-11-14
+
+Optional DeepSeek article summaries.
+
+### Included
+
+- Optional DeepSeek Chat Completions adapter, disabled by default;
+- Local settings for API key, base URL, model, and timeout;
+- Article summary action with local summary caching;
+- Obsidian `requestUrl` transport for the runtime adapter;
+- Local RSS reading remains available without DeepSeek configuration;
+- Speech recognition remains deferred to a later release.
+
 ## 0.1.0 — 2026-11-14
 
 First MIT release of **本地 RSS 阅读器**.

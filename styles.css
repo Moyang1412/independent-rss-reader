@@ -28,8 +28,15 @@
 .lrr-filters button { flex: 1; min-height: 32px; }
 .lrr-filters .lrr-mark-all-read { flex: 0 0 auto; }
 .lrr-filters button[aria-pressed="true"] { background: var(--interactive-accent); color: var(--text-on-accent); }
+.lrr-reading-controls, .lrr-batch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 12px 8px; }
+.lrr-reading-controls button, .lrr-batch-actions button { min-height: 30px; }
+.lrr-batch-actions { min-height: 30px; }
+.lrr-batch-count { color: var(--text-muted); font-size: var(--font-ui-smaller); }
 .lrr-status { padding: 0 12px 8px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
 .lrr-article-list { overflow: auto; }
+.lrr-article-select-row { display: flex; align-items: stretch; gap: 6px; padding: 0 12px; }
+.lrr-article-select-row input[type="checkbox"] { flex: 0 0 auto; align-self: center; margin: 0 2px 0 0; }
+.lrr-article-select-row .lrr-article-row { flex: 1; min-width: 0; }
 .lrr-article-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(80px, 0.35fr) auto auto; padding: 10px 12px; }
 .lrr-article-row.is-unread .lrr-article-title { font-weight: 700; }
 .lrr-article-source { overflow: hidden; color: var(--text-muted); font-size: var(--font-ui-smaller); text-overflow: ellipsis; white-space: nowrap; }

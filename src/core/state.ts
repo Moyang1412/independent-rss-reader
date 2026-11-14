@@ -15,6 +15,7 @@ function migratedObject(value: unknown): Record<string, unknown> {
     data = { ...withoutLegacyDailyNote, version: 2 };
   }
   if (version < 3) data = { ...data, version: CURRENT_STATE_VERSION, savedEntries: data.savedEntries || [] };
+  if (version < 4) data = { ...data, version: CURRENT_STATE_VERSION, lastReadBySubscription: data.lastReadBySubscription || {} };
   return data;
 }
 
@@ -43,6 +44,7 @@ export const stateSchema = z.object({
   laterIds: z.array(z.string()).default([]),
   selectedSubscriptionId: z.string().default(''),
   selectedEntryId: z.string().default(''),
+  lastReadBySubscription: z.record(z.string(), z.string()).default({}),
   query: z.string().default(''),
   deepseek: z.object({
     enabled: z.boolean().default(DEFAULT_DEEPSEEK_CONFIG.enabled),
@@ -73,6 +75,7 @@ export function normalizeState(value: unknown): StoredState {
     laterIds: parsed.laterIds,
     selectedSubscriptionId: parsed.selectedSubscriptionId,
     selectedEntryId: parsed.selectedEntryId,
+    lastReadBySubscription: parsed.lastReadBySubscription,
     query: parsed.query,
     deepseek: parsed.deepseek,
     aiSummaries: parsed.aiSummaries,

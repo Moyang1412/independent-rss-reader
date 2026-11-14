@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { adjacentEntryId, filterRecentEntries, markAllReadIds } from '../src/core/reading';
+import {
+  addEntryIds,
+  adjacentEntryId,
+  filterRecentEntries,
+  forgetLastReadPosition,
+  getLastReadPosition,
+  markAllReadIds,
+  pruneLastReadPositions,
+  rememberLastReadPosition,
+  sortEntriesByPublishedAt,
+} from '../src/core/reading';
 import type { FeedEntry } from '../src/core/model';
 
 const now = Date.parse('2026-11-15T00:00:00Z');
@@ -57,5 +67,51 @@ describe('reading helpers', () => {
     const existing = ['old'];
     expect(markAllReadIds(existing, entries)).toEqual(['old', 'new']);
     expect(existing).toEqual(['old']);
+  });
+
+  it('adds a batch to a collection without duplicates or mutation', () => {
+    const existing = ['saved'];
+    const batch = [entries[0], entries[1], { ...entries[1], id: 'saved' }];
+    expect(addEntryIds(existing, batch)).toEqual(['saved', 'new', 'old']);
+    expect(existing).toEqual(['saved']);
+    expect(batch.map(entry => entry.id)).toEqual(['new', 'old', 'saved']);
+  });
+
+  it('sorts articles by publication time and leaves undated items last', () => {
+    const sameTime = { ...entries[0], id: 'same-time' };
+    const undated = { ...entries[0], id: 'undated', publishedAt: undefined };
+    const invalid = { ...entries[0], id: 'invalid', publishedAt: Number.NaN };
+    const input = [entries[1], undated, entries[0], sameTime, invalid];
+
+    expect(sortEntriesByPublishedAt(input).map(entry => entry.id)).toEqual(['new', 'same-time', 'old', 'undated', 'invalid']);
+    expect(sortEntriesByPublishedAt(input, 'asc').map(entry => entry.id)).toEqual(['old', 'new', 'same-time', 'undated', 'invalid']);
+    expect(input.map(entry => entry.id)).toEqual(['old', 'undated', 'new', 'same-time', 'invalid']);
+  });
+
+  it('remembers and reads the last article independently per subscription', () => {
+    const initial = { feedA: 'one' };
+    const next = rememberLastReadPosition(initial, 'feedB', 'two');
+    expect(next).toEqual({ feedA: 'one', feedB: 'two' });
+    expect(getLastReadPosition(next, 'feedA')).toBe('one');
+    expect(getLastReadPosition(next, 'missing')).toBeUndefined();
+    expect(initial).toEqual({ feedA: 'one' });
+  });
+
+  it('ignores empty position keys and can forget a subscription position', () => {
+    const initial = { feedA: 'one' };
+    expect(rememberLastReadPosition(initial, '', 'two')).toEqual(initial);
+    expect(rememberLastReadPosition(initial, 'feedB', '')).toEqual(initial);
+    expect(forgetLastReadPosition({ ...initial, feedB: 'two' }, 'feedB')).toEqual({ feedA: 'one' });
+    expect(forgetLastReadPosition(initial, 'missing')).toEqual(initial);
+  });
+
+  it('prunes positions for removed subscriptions and articles', () => {
+    const positions = { feedA: 'new', feedB: 'gone', removed: 'unknown' };
+    const valid = {
+      feedA: [entries[0]],
+      feedB: [entries[1]],
+    };
+    expect(pruneLastReadPositions(positions, valid)).toEqual({ feedA: 'new' });
+    expect(positions).toEqual({ feedA: 'new', feedB: 'gone', removed: 'unknown' });
   });
 });

@@ -7,7 +7,7 @@ import { needsStateMigration, normalizeState } from './core/state';
 import { SAVED_ENTRIES_SUBSCRIPTION_ID, type FeedEntry, type Subscription, type StoredState } from './core/model';
 import { exportOpml, normalizeFeedUrl, parseOpml } from './core/feed-parser';
 import { mergeSavedEntries, moveSubscription, shouldRefreshSubscription } from './core/subscriptions';
-import { markAllReadIds } from './core/reading';
+import { markAllReadIds, pruneLastReadPositions } from './core/reading';
 import { ImportOpmlModal } from './opml-modal';
 import { ReaderSettingsTab } from './settings-tab';
 import { READER_VIEW_TYPE, ReaderView } from './view';
@@ -23,6 +23,11 @@ export default class LocalRssPlugin extends Plugin {
   override async onload() {
     const raw: unknown = await this.loadData();
     this.state = normalizeState(raw);
+    const entriesBySubscription = Object.fromEntries([
+      ...this.state.subscriptions.map(subscription => [subscription.id, subscription.entries] as const),
+      [SAVED_ENTRIES_SUBSCRIPTION_ID, this.state.savedEntries],
+    ]);
+    this.state.lastReadBySubscription = pruneLastReadPositions(this.state.lastReadBySubscription, entriesBySubscription);
     if (needsStateMigration(raw)) await this.saveData(this.state);
     this.registerView(READER_VIEW_TYPE, leaf => new ReaderView(leaf, this));
     this.addRibbonIcon('rss', '打开本地 RSS', () => { void this.openReader(); });
@@ -156,6 +161,7 @@ export default class LocalRssPlugin extends Plugin {
       this.state.savedEntries = mergeSavedEntries(this.state.savedEntries, subscription.entries);
     }
     this.state.subscriptions = this.state.subscriptions.filter(item => item.id !== id);
+    delete this.state.lastReadBySubscription[id];
     if (this.state.selectedSubscriptionId === id) this.state.selectedSubscriptionId = this.state.subscriptions[0]?.id || (this.state.savedEntries.length ? SAVED_ENTRIES_SUBSCRIPTION_ID : '');
     await this.persist();
   }
@@ -237,6 +243,18 @@ export default class LocalRssPlugin extends Plugin {
     this.state.readIds = markAllReadIds(this.state.readIds, subscription.entries);
     await this.persist();
     new Notice('已将当前订阅全部标记为已读');
+  }
+
+  async addEntriesToFavorites(ids: readonly string[]) {
+    if (!ids.length) return;
+    this.state.favoriteIds = unique([...this.state.favoriteIds, ...ids]);
+    await this.persist();
+  }
+
+  async addEntriesToLater(ids: readonly string[]) {
+    if (!ids.length) return;
+    this.state.laterIds = unique([...this.state.laterIds, ...ids]);
+    await this.persist();
   }
 
   async importOpml(text: string) {

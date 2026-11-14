@@ -10,6 +10,7 @@ describe('state migrations', () => {
     expect(state.deepseek.apiKey).toBe('');
     expect(state.aiSummaries).toEqual({});
     expect(state.savedEntries).toEqual([]);
+    expect(state.lastReadBySubscription).toEqual({});
   });
 
   it('migrates legacy v1 data and removes the old daily note setting', () => {
@@ -21,9 +22,10 @@ describe('state migrations', () => {
   });
 
   it('preserves current optional data while migrating the version', () => {
-    const state = normalizeState({ version: 1, deepseek: { enabled: true, apiKey: 'secret' }, aiSummaries: { one: { text: '摘要', createdAt: 1, model: 'deepseek-flash' } } });
+    const state = normalizeState({ version: 1, deepseek: { enabled: true, apiKey: 'secret' }, aiSummaries: { one: { text: '摘要', createdAt: 1, model: 'deepseek-flash' } }, lastReadBySubscription: { feedA: 'entry-1' } });
     expect(state.deepseek.enabled).toBe(true);
     expect(state.aiSummaries.one.text).toBe('摘要');
+    expect(state.lastReadBySubscription).toEqual({ feedA: 'entry-1' });
   });
 
   it('rejects data from a future version', () => {

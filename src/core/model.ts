@@ -1,6 +1,6 @@
 import type { DeepSeekConfig } from '../ai/deepseek';
 
-export const CURRENT_STATE_VERSION = 3 as const;
+export const CURRENT_STATE_VERSION = 4 as const;
 export const SAVED_ENTRIES_SUBSCRIPTION_ID = '__saved_entries__';
 
 export type FeedFormat = 'rss' | 'rdf' | 'atom';
@@ -59,6 +59,7 @@ export interface StoredState {
   laterIds: string[];
   selectedSubscriptionId?: string;
   selectedEntryId?: string;
+  lastReadBySubscription: Record<string, string>;
   query: string;
   deepseek: DeepSeekConfig;
   aiSummaries: Record<string, AiSummary>;

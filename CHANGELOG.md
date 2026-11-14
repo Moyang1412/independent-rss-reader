@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — 2026-11-15
+
+Complete the remaining first reading-efficiency features.
+
+### Included
+
+- Batch favorite selected articles;
+- Batch add selected articles to reading later;
+- Toggle the article list between newest-first and oldest-first publication order;
+- Remember the last opened article for each subscription and restore it after reopening;
+- Migrate local state to v4 with per-subscription reading positions.
+
 ## 0.2.0 — 2026-11-15
 
 Complete the first reading-efficiency features.

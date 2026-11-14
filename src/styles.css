@@ -1,0 +1,52 @@
+.lrr-view { height: 100%; }
+.lrr-shell { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.lrr-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--background-modifier-border); }
+.lrr-title { margin: 0; font-size: var(--font-ui-large); }
+.lrr-actions, .lrr-article-actions, .lrr-modal-actions { display: flex; align-items: center; gap: 8px; }
+.lrr-icon-button { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 36px; }
+.lrr-body { display: grid; grid-template-columns: minmax(180px, 240px) minmax(260px, 360px) minmax(0, 1fr); min-height: 0; flex: 1; }
+.lrr-sources, .lrr-center, .lrr-article { min-width: 0; min-height: 0; overflow: auto; }
+.lrr-sources { padding: 12px 8px; border-right: 1px solid var(--background-modifier-border); }
+.lrr-sources h2, .lrr-source-group h3 { margin: 6px 8px 8px; font-size: var(--font-ui-small); color: var(--text-muted); }
+.lrr-source-group + .lrr-source-group { margin-top: 14px; }
+.lrr-source-row, .lrr-article-row { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-normal); text-align: left; cursor: pointer; }
+.lrr-source-row { justify-content: space-between; padding: 8px; }
+.lrr-source-row:hover, .lrr-source-row[aria-pressed="true"], .lrr-article-row:hover, .lrr-article-row[aria-pressed="true"] { background: var(--background-modifier-hover); }
+.lrr-source-name, .lrr-article-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lrr-source-count, .lrr-article-date { color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.lrr-center { display: flex; flex-direction: column; border-right: 1px solid var(--background-modifier-border); }
+.lrr-search { padding: 12px 12px 8px; }
+.lrr-search input { width: 100%; box-sizing: border-box; }
+.lrr-filters { display: flex; gap: 4px; padding: 0 12px 8px; }
+.lrr-filters button { flex: 1; min-height: 32px; }
+.lrr-filters button[aria-pressed="true"] { background: var(--interactive-accent); color: var(--text-on-accent); }
+.lrr-status { padding: 0 12px 8px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.lrr-article-list { overflow: auto; }
+.lrr-article-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; padding: 10px 12px; }
+.lrr-article-row.is-unread .lrr-article-title { font-weight: 700; }
+.lrr-article-mark { color: var(--text-accent); }
+.lrr-article { padding: 24px clamp(18px, 4vw, 48px); }
+.lrr-article-head { max-width: 820px; margin: 0 auto 24px; }
+.lrr-article-head h2 { margin: 0 0 8px; font-size: var(--font-text-2xl); line-height: 1.25; }
+.lrr-article-meta { display: flex; gap: 12px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.lrr-article-actions { flex-wrap: wrap; margin-top: 16px; }
+.lrr-article-actions button, .lrr-external-link { min-height: 34px; padding: 4px 10px; border: 1px solid var(--background-modifier-border); border-radius: 6px; }
+.lrr-article-content { max-width: 820px; margin: 0 auto; line-height: 1.75; }
+.lrr-article-content img { display: block; max-width: 100%; height: auto; margin: 1em auto; }
+.lrr-article-content pre { overflow: auto; padding: 12px; border-radius: 6px; background: var(--background-secondary); }
+.lrr-article-content a { overflow-wrap: anywhere; }
+.lrr-empty { color: var(--text-muted); text-align: center; margin-top: 20vh; }
+.lrr-form-hint { color: var(--text-muted); }
+.lrr-modal-actions { justify-content: flex-end; margin-top: 16px; }
+.lrr-opml-textarea { width: 100%; min-height: 220px; resize: vertical; }
+@media (max-width: 800px) {
+  .lrr-body { grid-template-columns: 180px minmax(0, 1fr); }
+  .lrr-article { grid-column: 1 / -1; min-height: 45vh; border-top: 1px solid var(--background-modifier-border); }
+}
+@media (max-width: 560px) {
+  .lrr-body { display: flex; flex-direction: column; }
+  .lrr-sources { max-height: 28vh; border-right: 0; border-bottom: 1px solid var(--background-modifier-border); }
+  .lrr-center { min-height: 28vh; border-right: 0; }
+  .lrr-article { min-height: 44vh; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }

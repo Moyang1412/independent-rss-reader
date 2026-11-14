@@ -13,6 +13,9 @@
 .lrr-source-row { justify-content: space-between; padding: 8px; }
 .lrr-source-row:hover, .lrr-source-row[aria-pressed="true"], .lrr-article-row:hover, .lrr-article-row[aria-pressed="true"] { background: var(--background-modifier-hover); }
 .lrr-source-name, .lrr-article-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lrr-source-meta { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.lrr-source-error { color: var(--text-error); }
+.lrr-source-state { color: var(--text-warning); }
 .lrr-source-count, .lrr-article-date { color: var(--text-muted); font-size: var(--font-ui-smaller); }
 .lrr-center { display: flex; flex-direction: column; border-right: 1px solid var(--background-modifier-border); }
 .lrr-search { padding: 12px 12px 8px; }

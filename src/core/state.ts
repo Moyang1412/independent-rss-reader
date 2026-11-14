@@ -1,16 +1,41 @@
 import { z } from 'zod';
-import type { StoredState, Subscription } from './model';
+import { CURRENT_STATE_VERSION, type StoredState } from './model';
 import { DEFAULT_DEEPSEEK_CONFIG } from '../ai/deepseek';
+
+const rawStateSchema = z.looseObject({ version: z.number().int().nonnegative().optional() });
+
+function migratedObject(value: unknown): Record<string, unknown> {
+  const parsed = rawStateSchema.parse(value ?? {});
+  const version = parsed.version ?? 0;
+  if (version > CURRENT_STATE_VERSION) throw new Error(`不支持的本地数据版本：${version}`);
+  let data: Record<string, unknown> = { ...parsed };
+  if (version < 1) data = { ...data, version: 1 };
+  if (version < 2 || Object.hasOwn(data, 'dailyNoteFolder')) {
+    const withoutLegacyDailyNote = Object.fromEntries(Object.entries(data).filter(([key]) => key !== 'dailyNoteFolder'));
+    data = { ...withoutLegacyDailyNote, version: CURRENT_STATE_VERSION };
+  }
+  return data;
+}
+
+export function needsStateMigration(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return true;
+  const raw = value as Record<string, unknown>;
+  return raw.version !== CURRENT_STATE_VERSION || Object.hasOwn(raw, 'dailyNoteFolder');
+}
 
 const subscriptionSchema = z.object({
   id: z.string(), url: z.string(), name: z.string(), group: z.string().default(''),
-  entries: z.array(z.unknown()).default([]), updatedAt: z.number().default(0),
+  entries: z.array(z.object({
+    id: z.string(), feedUrl: z.string(), title: z.string(), link: z.string().optional(), author: z.string().optional(),
+    summary: z.string().default(''), content: z.string().default(''), publishedAt: z.number().optional(),
+    publishedText: z.string().optional(), imageUrl: z.string().optional(),
+  })).default([]), updatedAt: z.number().default(0),
   lastAttemptAt: z.number().default(0), error: z.string().optional(), etag: z.string().optional(),
   lastModified: z.string().optional(), paused: z.boolean().default(false), site: z.string().optional(), image: z.string().optional(),
 });
 
 export const stateSchema = z.object({
-  version: z.literal(1).default(1),
+  version: z.literal(CURRENT_STATE_VERSION).default(CURRENT_STATE_VERSION),
   subscriptions: z.array(subscriptionSchema).default([]),
   readIds: z.array(z.string()).default([]),
   favoriteIds: z.array(z.string()).default([]),
@@ -33,10 +58,10 @@ export const stateSchema = z.object({
 });
 
 export function normalizeState(value: unknown): StoredState {
-  const parsed = stateSchema.parse(value ?? {});
+  const parsed = stateSchema.parse(migratedObject(value));
   return {
-    version: 1,
-    subscriptions: parsed.subscriptions as Subscription[],
+    version: CURRENT_STATE_VERSION,
+    subscriptions: parsed.subscriptions,
     readIds: parsed.readIds,
     favoriteIds: parsed.favoriteIds,
     laterIds: parsed.laterIds,

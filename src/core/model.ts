@@ -1,5 +1,7 @@
 import type { DeepSeekConfig } from '../ai/deepseek';
 
+export const CURRENT_STATE_VERSION = 2 as const;
+
 export type FeedFormat = 'rss' | 'rdf' | 'atom';
 
 export interface FeedEntry {
@@ -49,7 +51,7 @@ export interface OpmlFeed {
 }
 
 export interface StoredState {
-  version: 1;
+  version: typeof CURRENT_STATE_VERSION;
   subscriptions: Subscription[];
   readIds: string[];
   favoriteIds: string[];

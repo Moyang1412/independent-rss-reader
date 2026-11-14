@@ -1,9 +1,10 @@
-import { ItemView, Notice, setIcon, type WorkspaceLeaf } from 'obsidian';
+import { ItemView, Menu, Notice, setIcon, type WorkspaceLeaf } from 'obsidian';
 import type LocalRssPlugin from './main';
 import type { FeedEntry, Subscription } from './core/model';
 import { sanitizeArticleHtml } from './core/feed-parser';
 import { ConfirmModal } from './confirm-modal';
 import { MicrophoneRecorder } from './audio/recorder';
+import { countUnreadEntries } from './core/subscriptions';
 
 export const READER_VIEW_TYPE = 'independent-rss-reader-view';
 
@@ -126,9 +127,23 @@ export class ReaderView extends ItemView {
       for (const subscription of subscriptions) {
         const row = section.createEl('button', { cls: 'lrr-source-row', attr: { type: 'button', 'aria-pressed': String(this.currentSubscription()?.id === subscription.id) } });
         row.createSpan({ text: subscription.name || subscription.url, cls: 'lrr-source-name' });
-        row.createSpan({ text: String(subscription.entries.length), cls: 'lrr-source-count' });
+        const unread = countUnreadEntries(subscription, this.plugin.state.readIds);
+        const meta = row.createSpan({ cls: 'lrr-source-meta' });
+        meta.createSpan({ text: `${unread} 未读`, cls: 'lrr-source-unread' });
+        if (subscription.paused) meta.createSpan({ text: '已暂停', cls: 'lrr-source-state' });
+        else if (subscription.error) meta.createSpan({ text: '更新失败', cls: 'lrr-source-error', attr: { title: subscription.error } });
+        else if (subscription.updatedAt) meta.createSpan({ text: new Date(subscription.updatedAt).toLocaleDateString(), cls: 'lrr-source-date' });
         row.onclick = () => { this.plugin.state.selectedSubscriptionId = subscription.id; this.selectedId = ''; void this.plugin.persist(); this.render(); };
-        row.oncontextmenu = event => { event.preventDefault(); new ConfirmModal(this.plugin.app, `删除订阅“${subscription.name}”？已保存的文章不会自动删除。`, () => { void this.plugin.removeSubscription(subscription.id); }).open(); };
+        row.oncontextmenu = event => {
+          event.preventDefault();
+          const menu = new Menu();
+          menu.addItem(item => item.setTitle('编辑订阅').setIcon('pencil').onClick(() => this.plugin.openEditSubscription(subscription.id)));
+          menu.addItem(item => item.setTitle(subscription.paused ? '恢复订阅' : '暂停订阅').setIcon(subscription.paused ? 'play' : 'pause').onClick(() => { void this.plugin.toggleSubscriptionPaused(subscription.id); }));
+          menu.addItem(item => item.setTitle('刷新此订阅').setIcon('refresh-cw').onClick(() => { void this.plugin.refreshOneSubscription(subscription.id); }));
+          menu.addSeparator();
+          menu.addItem(item => item.setTitle('删除订阅').setIcon('trash').onClick(() => new ConfirmModal(this.plugin.app, `删除订阅“${subscription.name}”？已保存的文章不会自动删除。`, () => { void this.plugin.removeSubscription(subscription.id); }).open()));
+          menu.showAtMouseEvent(event);
+        };
       }
     }
   }

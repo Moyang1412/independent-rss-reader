@@ -1,9 +1,11 @@
 import { moment, Notice, Plugin, TFile, normalizePath } from 'obsidian';
 import { AddFeedModal } from './add-feed-modal';
+import { EditFeedModal } from './edit-feed-modal';
 import { fetchFeed } from './feed-service';
-import { normalizeState } from './core/state';
+import { needsStateMigration, normalizeState } from './core/state';
 import type { FeedEntry, Subscription, StoredState } from './core/model';
 import { exportOpml, normalizeFeedUrl, parseOpml } from './core/feed-parser';
+import { shouldRefreshSubscription } from './core/subscriptions';
 import { ImportOpmlModal } from './opml-modal';
 import { ReaderSettingsTab } from './settings-tab';
 import { READER_VIEW_TYPE, ReaderView } from './view';
@@ -19,7 +21,7 @@ export default class LocalRssPlugin extends Plugin {
   override async onload() {
     const raw: unknown = await this.loadData();
     this.state = normalizeState(raw);
-    if (raw && typeof raw === 'object' && Object.hasOwn(raw, 'dailyNoteFolder')) await this.saveData(this.state);
+    if (needsStateMigration(raw)) await this.saveData(this.state);
     this.registerView(READER_VIEW_TYPE, leaf => new ReaderView(leaf, this));
     this.addRibbonIcon('rss', '打开本地 RSS', () => { void this.openReader(); });
     this.addCommand({ id: 'open-reader', name: '打开本地 RSS', callback: () => { void this.openReader(); } });
@@ -38,6 +40,10 @@ export default class LocalRssPlugin extends Plugin {
   }
 
   openAddSubscription() { new AddFeedModal(this).open(); }
+  openEditSubscription(id: string) {
+    const subscription = this.state.subscriptions.find(item => item.id === id);
+    if (subscription) new EditFeedModal(this, subscription).open();
+  }
   openImportOpml() { new ImportOpmlModal(this).open(); }
 
   async persist() { await this.saveData(this.state); this.refreshViews(); }
@@ -123,6 +129,69 @@ export default class LocalRssPlugin extends Plugin {
     await this.persist();
   }
 
+  async updateSubscription(id: string, rawUrl: string, requestedName = '', requestedGroup = '') {
+    const subscription = this.state.subscriptions.find(item => item.id === id);
+    if (!subscription) throw new Error('订阅不存在');
+    const url = normalizeFeedUrl(rawUrl);
+    const duplicate = this.state.subscriptions.find(item => item.id !== id && item.url === url);
+    if (duplicate) throw new Error('这个订阅已经存在');
+    if (url !== subscription.url) {
+      const result = await fetchFeed(url);
+      subscription.url = result.url;
+      subscription.entries = result.feed.entries;
+      subscription.site = result.feed.site;
+      subscription.image = result.feed.image;
+      subscription.updatedAt = Date.now();
+      subscription.lastAttemptAt = Date.now();
+      subscription.error = '';
+      subscription.etag = result.etag;
+      subscription.lastModified = result.lastModified;
+    }
+    subscription.name = requestedName.trim() || subscription.name || new URL(url).hostname;
+    subscription.group = requestedGroup.trim();
+    await this.persist();
+  }
+
+  async toggleSubscriptionPaused(id: string) {
+    const subscription = this.state.subscriptions.find(item => item.id === id);
+    if (!subscription) return;
+    subscription.paused = !subscription.paused;
+    await this.persist();
+  }
+
+  private async refreshSubscription(subscription: Subscription) {
+    subscription.lastAttemptAt = Date.now();
+    try {
+      const result = await fetchFeed(subscription.url, subscription);
+      subscription.entries = result.feed.entries;
+      subscription.site = result.feed.site;
+      subscription.image = result.feed.image;
+      subscription.updatedAt = Date.now();
+      subscription.error = '';
+      subscription.etag = result.etag;
+      subscription.lastModified = result.lastModified;
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'NOT_MODIFIED') {
+        subscription.error = '';
+        return true;
+      }
+      subscription.error = error instanceof Error ? error.message : '刷新失败';
+      return false;
+    }
+  }
+
+  async refreshOneSubscription(id: string) {
+    const subscription = this.state.subscriptions.find(item => item.id === id);
+    if (!subscription) return;
+    if (subscription.paused) { new Notice('这个订阅已暂停'); return; }
+    const notice = new Notice(`正在刷新“${subscription.name}”…`, 0);
+    const success = await this.refreshSubscription(subscription);
+    await this.persist();
+    notice.hide();
+    new Notice(success ? `已刷新“${subscription.name}”` : `刷新失败：${subscription.error || '未知错误'}`);
+  }
+
   async importOpml(text: string) {
     const feeds = parseOpml(text).feeds;
     let added = 0;
@@ -150,20 +219,15 @@ export default class LocalRssPlugin extends Plugin {
     if (!this.state.subscriptions.length) { new Notice('还没有订阅'); return; }
     const notice = new Notice('正在刷新订阅…', 0);
     let success = 0;
+    let skipped = 0;
     for (const subscription of this.state.subscriptions) {
-      subscription.lastAttemptAt = Date.now();
-      try {
-        const result = await fetchFeed(subscription.url, subscription);
-        subscription.entries = result.feed.entries; subscription.site = result.feed.site; subscription.image = result.feed.image;
-        subscription.updatedAt = Date.now(); subscription.error = ''; subscription.etag = result.etag; subscription.lastModified = result.lastModified; success++;
-      } catch (error) {
-        if (error instanceof Error && error.message === 'NOT_MODIFIED') { subscription.error = ''; success++; continue; }
-        subscription.error = error instanceof Error ? error.message : '刷新失败';
-      }
+      if (!shouldRefreshSubscription(subscription)) { skipped++; continue; }
+      if (await this.refreshSubscription(subscription)) success++;
     }
     await this.persist();
     notice.hide();
-    new Notice(`已刷新 ${success}/${this.state.subscriptions.length} 个订阅`);
+    const suffix = skipped ? `，跳过 ${skipped} 个已暂停订阅` : '';
+    new Notice(`已刷新 ${success}/${this.state.subscriptions.length} 个订阅${suffix}`);
   }
 
   toggleFavorite(id: string) {

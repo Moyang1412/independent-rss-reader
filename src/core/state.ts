@@ -17,6 +17,11 @@ export const DEFAULT_TRANSLATION_SETTINGS = {
   targetLanguage: '中文',
 } as const;
 
+export const DEFAULT_ORGANIZATION_SETTINGS = {
+  enabled: false,
+  targetLanguage: '中文',
+} as const;
+
 const rawStateSchema = z.looseObject({ version: z.number().int().nonnegative().optional() });
 
 function migratedObject(value: unknown): Record<string, unknown> {
@@ -37,6 +42,7 @@ function migratedObject(value: unknown): Record<string, unknown> {
   if (version < 8) data = { ...data, version: CURRENT_STATE_VERSION };
   if (version < 9) data = { ...data, version: CURRENT_STATE_VERSION, remote: data.remote || {} };
   if (version < 10) data = { ...data, version: CURRENT_STATE_VERSION, translation: data.translation || {}, aiTranslations: data.aiTranslations || {} };
+  if (version < 11) data = { ...data, version: CURRENT_STATE_VERSION, organization: data.organization || {}, aiOrganizations: data.aiOrganizations || {} };
   return data;
 }
 
@@ -110,6 +116,10 @@ export const stateSchema = z.object({
     enabled: z.boolean().default(DEFAULT_TRANSLATION_SETTINGS.enabled),
     targetLanguage: z.string().default(DEFAULT_TRANSLATION_SETTINGS.targetLanguage),
   }).default(DEFAULT_TRANSLATION_SETTINGS),
+  organization: z.object({
+    enabled: z.boolean().default(DEFAULT_ORGANIZATION_SETTINGS.enabled),
+    targetLanguage: z.string().default(DEFAULT_ORGANIZATION_SETTINGS.targetLanguage),
+  }).default(DEFAULT_ORGANIZATION_SETTINGS),
   aiSummaries: z.record(z.string(), z.object({
     text: z.string(),
     createdAt: z.number().default(0),
@@ -120,6 +130,15 @@ export const stateSchema = z.object({
     createdAt: z.number().default(0),
     targetLanguage: z.string().default(DEFAULT_TRANSLATION_SETTINGS.targetLanguage),
     model: z.string().default(''),
+  })).default({}),
+  aiOrganizations: z.record(z.string(), z.object({
+    tags: z.array(z.string()).default([]),
+    note: z.string().default(''),
+    summary: z.string().default(''),
+    createdAt: z.number().default(0),
+    model: z.string().default(''),
+    promptVersion: z.string().default(''),
+    targetLanguage: z.string().default(DEFAULT_ORGANIZATION_SETTINGS.targetLanguage),
   })).default({}),
   savedEntries: z.array(z.object({
     id: z.string(), sourceId: z.string().optional(), feedUrl: z.string(), title: z.string(), link: z.string().optional(), author: z.string().optional(),
@@ -148,8 +167,10 @@ export function normalizeState(value: unknown): StoredState {
     deepseek: parsed.deepseek,
     remote: parsed.remote,
     translation: parsed.translation,
+    organization: parsed.organization,
     aiSummaries: parsed.aiSummaries,
     aiTranslations: parsed.aiTranslations,
+    aiOrganizations: parsed.aiOrganizations,
     savedEntries: parsed.savedEntries,
   };
 }

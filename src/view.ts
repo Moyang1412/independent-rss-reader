@@ -3,6 +3,7 @@ import type LocalRssPlugin from './main';
 import { SAVED_ENTRIES_SUBSCRIPTION_ID, type FeedEntry, type Subscription } from './core/model';
 import { sanitizeArticleHtml } from './core/feed-parser';
 import { MicrophoneRecorder } from './audio/recorder';
+import type { ArticleOrganizationSuggestion } from './ai/organize';
 import { countUnreadEntries } from './core/subscriptions';
 import { adjacentEntryId, filterRecentEntries, getLastReadPosition, RECENT_DAYS, rememberLastReadPosition, sortEntriesByPublishedAt, type SortOrder } from './core/reading';
 import { virtualWindowRange } from './core/virtual-list';
@@ -452,6 +453,20 @@ export class ReaderView extends ItemView {
         this.render();
       });
     };
+    const cachedOrganization = this.plugin.getCachedOrganization(entry.id);
+    const canOrganize = this.plugin.canUseOrganization();
+    const organize = actions.createEl('button', { text: cachedOrganization ? '查看整理建议' : 'AI 整理', attr: { type: 'button', 'aria-label': '生成当前文章的 AI 整理建议' } });
+    organize.disabled = !cachedOrganization && !canOrganize;
+    if (organize.disabled) organize.title = '请先在插件设置中启用 AI 辅助整理、DeepSeek 并填写 API Key';
+    organize.onclick = () => {
+      if (cachedOrganization) { this.render(); return; }
+      organize.disabled = true;
+      organize.setText('整理中…');
+      void this.plugin.suggestArticleOrganization(entry).then(() => this.render()).catch(error => {
+        new Notice(error instanceof Error ? error.message : 'AI 整理建议生成失败');
+        this.render();
+      });
+    };
     const note = actions.createEl('button', { text: '记到今日日记', attr: { type: 'button' } });
     note.onclick = () => { void this.plugin.appendDailyNote(entry).then(() => new Notice('已追加到今日日记')).catch(error => new Notice(error instanceof Error ? error.message : '写入失败')); };
     if (entry.link) {
@@ -475,6 +490,39 @@ export class ReaderView extends ItemView {
       translation.createEl('h3', { text: `文章翻译（${this.plugin.state.translation.targetLanguage}）` });
       translation.createDiv({ text: cachedTranslation, cls: 'lrr-translation-body' });
     }
+    if (cachedOrganization) this.renderOrganizationSuggestion(entry, cachedOrganization, knowledge);
+  }
+
+  private renderOrganizationSuggestion(entry: FeedEntry, suggestion: ArticleOrganizationSuggestion, knowledge: ReturnType<LocalRssPlugin['getArticleKnowledge']>) {
+    const panel = this.article.createDiv({ cls: 'lrr-ai-organization', attr: { 'aria-live': 'polite' } });
+    panel.createEl('h3', { text: 'AI 整理建议' });
+    if (suggestion.tags.length) {
+      const tags = panel.createDiv({ cls: 'lrr-ai-organization-tags' });
+      tags.createEl('strong', { text: '建议标签：' });
+      tags.createSpan({ text: suggestion.tags.map(tag => `#${tag}`).join(' ') });
+    }
+    if (suggestion.note) {
+      panel.createEl('strong', { text: '建议备注：' });
+      panel.createDiv({ text: suggestion.note, cls: 'lrr-ai-organization-note' });
+    }
+    if (suggestion.summary) {
+      panel.createEl('strong', { text: '整理摘要：' });
+      panel.createDiv({ text: suggestion.summary, cls: 'lrr-ai-organization-summary' });
+    }
+    const hint = panel.createEl('p', { text: '建议不会自动写入。确认后会合并标签；已有手工备注会保留，并在其后追加 AI 建议。', cls: 'lrr-form-hint' });
+    hint.setAttribute('role', 'note');
+    const actions = panel.createDiv({ cls: 'lrr-ai-organization-actions' });
+    const confirm = actions.createEl('button', { text: '确认写入标签/备注', attr: { type: 'button', 'aria-label': `确认将 AI 整理建议写入文章：${entry.title}` } });
+    confirm.onclick = () => {
+      confirm.disabled = true;
+      void this.plugin.applyOrganizationSuggestion(entry.id, suggestion).then(() => {
+        new Notice('已写入 AI 整理建议');
+        this.render();
+      }).catch(error => {
+        confirm.disabled = false;
+        new Notice(error instanceof Error ? error.message : '写入 AI 整理建议失败');
+      });
+    };
   }
 
   private updateAudioButtons() {

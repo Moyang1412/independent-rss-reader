@@ -20,6 +20,8 @@ import { createObsidianDeepSeekClient } from './ai/deepseek-obsidian';
 import { createObsidianDeepSeekAsrClient } from './ai/deepseek-asr-obsidian';
 import type { DeepSeekAsrResult } from './ai/deepseek-asr';
 import { createObsidianTranslationClient } from './ai/translation-obsidian';
+import { ORGANIZE_PROMPT_VERSION, organizeCacheKey, type ArticleOrganizationSuggestion } from './ai/organize';
+import { createObsidianOrganizationClient } from './ai/organize-obsidian';
 import { createObsidianRemoteRegistry } from './remote/obsidian';
 import { mergeRemoteSnapshot, remoteSubscriptionKey } from './remote/adapter';
 
@@ -241,6 +243,45 @@ export default class LocalRssPlugin extends Plugin {
     return this.state.aiSummaries[entryId]?.text || '';
   }
 
+  canUseOrganization() {
+    return this.state.organization.enabled && this.canUseDeepSeek() && Boolean(this.state.organization.targetLanguage.trim());
+  }
+
+  getOrganizationTargetLanguage() {
+    return this.state.organization.targetLanguage.trim() || '中文';
+  }
+
+  getCachedOrganization(entryId: string): ArticleOrganizationSuggestion | undefined {
+    const key = organizeCacheKey(entryId, this.state.deepseek, {
+      language: this.getOrganizationTargetLanguage(),
+      promptVersion: ORGANIZE_PROMPT_VERSION,
+    });
+    const cached = this.state.aiOrganizations[key];
+    if (!cached) return undefined;
+    return { tags: cached.tags, note: cached.note, summary: cached.summary };
+  }
+
+  async suggestArticleOrganization(entry: FeedEntry): Promise<ArticleOrganizationSuggestion> {
+    const cached = this.getCachedOrganization(entry.id);
+    if (cached) return cached;
+    if (!this.canUseOrganization()) throw new Error('请先在插件设置中启用 AI 辅助整理、DeepSeek 并填写 API Key');
+    const targetLanguage = this.getOrganizationTargetLanguage();
+    const suggestion = await createObsidianOrganizationClient({
+      ...this.state.deepseek,
+      enabled: this.state.organization.enabled && this.state.deepseek.enabled,
+    }).organize(entry, { language: targetLanguage, promptVersion: ORGANIZE_PROMPT_VERSION });
+    const key = organizeCacheKey(entry.id, this.state.deepseek, { language: targetLanguage, promptVersion: ORGANIZE_PROMPT_VERSION });
+    this.state.aiOrganizations[key] = {
+      ...suggestion,
+      createdAt: Date.now(),
+      model: this.state.deepseek.model.trim(),
+      promptVersion: ORGANIZE_PROMPT_VERSION,
+      targetLanguage,
+    };
+    await this.persist();
+    return suggestion;
+  }
+
   getArticleKnowledge(entryId: string) {
     return this.state.articleKnowledge[entryId] || { tags: [], note: '' };
   }
@@ -248,6 +289,15 @@ export default class LocalRssPlugin extends Plugin {
   async updateArticleKnowledge(entryId: string, tags: readonly string[], note: string) {
     this.state.articleKnowledge = updateArticleKnowledge(this.state.articleKnowledge, entryId, { tags: normalizeTags(tags), note });
     await this.persist();
+  }
+
+  async applyOrganizationSuggestion(entryId: string, suggestion: ArticleOrganizationSuggestion) {
+    const knowledge = this.getArticleKnowledge(entryId);
+    const marker = suggestion.note.trim() ? `AI 整理建议：${suggestion.note.trim()}` : '';
+    const note = marker && !knowledge.note.includes(marker)
+      ? (knowledge.note ? `${knowledge.note}\n\n${marker}` : marker)
+      : knowledge.note;
+    await this.updateArticleKnowledge(entryId, [...new Set([...knowledge.tags, ...suggestion.tags])], note);
   }
 
   private sourceNameForEntry(entry: FeedEntry) {

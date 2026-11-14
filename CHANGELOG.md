@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.0 — 2026-11-15
+
+Add optional AI-assisted article organization while keeping manual knowledge editing and local reading independent.
+
+### Included
+
+- Add a DeepSeek-compatible organization adapter with strict JSON validation;
+- Generate optional tags, notes, and a one-sentence organization summary for the current article;
+- Cache suggestions locally by article, model, target language, and prompt version;
+- Require explicit confirmation before merging suggested tags or notes into local article knowledge;
+- Preserve manual tags and notes, make confirmation idempotent, and keep failures from changing article state;
+- Add state migration to v11 for organization settings and cached suggestions.
+
 ## 0.10.0 — 2026-11-15
 
 Add an optional article translation adapter while keeping original articles and local reading independent.

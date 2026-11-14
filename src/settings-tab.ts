@@ -114,7 +114,7 @@ export class ReaderSettingsTab extends PluginSettingTab {
 
     new Setting(containerEl).setName('DeepSeek（可选）').setHeading();
     containerEl.createEl('p', { text: '配置后可在文章页面生成摘要、直接录音或选择音频进行语音搜索。录音会在本地编码为 16-bit PCM WAV；选择音频时支持 WAV、Ogg Opus，单个音频最多 8 MiB、120 秒。API Key 只保存在当前 Obsidian 库的插件数据中；不配置时，本地 RSS 阅读功能仍可正常使用。' });
-    new Setting(containerEl).setName('启用 DeepSeek').setDesc('只影响摘要功能，不影响订阅、阅读、收藏和日记。').addToggle(toggle => {
+    new Setting(containerEl).setName('启用 DeepSeek').setDesc('影响摘要、语音搜索、翻译和 AI 整理；不影响订阅、阅读、收藏和日记。').addToggle(toggle => {
       toggle.setValue(this.plugin.state.deepseek.enabled).onChange(async value => {
         this.plugin.state.deepseek.enabled = value;
         await this.plugin.persist();
@@ -159,6 +159,21 @@ export class ReaderSettingsTab extends PluginSettingTab {
     new Setting(containerEl).setName('目标语言').setDesc('例如中文、English、日本語。').addText(text => {
       text.setValue(this.plugin.state.translation.targetLanguage).onChange(async value => {
         this.plugin.state.translation.targetLanguage = value.trim() || '中文';
+        await this.plugin.persist();
+      });
+    });
+
+    new Setting(containerEl).setName('AI 辅助整理（可选）').setHeading();
+    containerEl.createEl('p', { text: '按需为当前文章生成标签、备注和整理摘要。建议会先显示在文章页面，只有点击确认后才会写入本地标签和备注；不会自动处理整库，也不会替换原文。' });
+    new Setting(containerEl).setName('启用 AI 辅助整理').setDesc('默认关闭。启用后需要同时启用 DeepSeek 并填写 API Key。').addToggle(toggle => {
+      toggle.setValue(this.plugin.state.organization.enabled).onChange(async value => {
+        this.plugin.state.organization.enabled = value;
+        await this.plugin.persist();
+      });
+    });
+    new Setting(containerEl).setName('整理输出语言').setDesc('例如中文、English、日本語。').addText(text => {
+      text.setValue(this.plugin.state.organization.targetLanguage).onChange(async value => {
+        this.plugin.state.organization.targetLanguage = value.trim() || '中文';
         await this.plugin.persist();
       });
     });

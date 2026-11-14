@@ -24,6 +24,8 @@ describe('state migrations', () => {
     expect(state.remote).toEqual({ enabled: false, adapterId: 'json', baseUrl: '', apiKey: '', timeoutMs: 15_000 });
     expect(state.translation).toEqual({ enabled: false, targetLanguage: '中文' });
     expect(state.aiTranslations).toEqual({});
+    expect(state.organization).toEqual({ enabled: false, targetLanguage: '中文' });
+    expect(state.aiOrganizations).toEqual({});
   });
 
   it('migrates legacy v1 data and removes the old daily note setting', () => {
@@ -75,5 +77,12 @@ describe('state migrations', () => {
     expect(state.version).toBe(CURRENT_STATE_VERSION);
     expect(state.translation).toEqual({ enabled: true, targetLanguage: 'English' });
     expect(state.aiTranslations.one.text).toBe('Translated');
+  });
+
+  it('adds AI organization settings and cache when migrating from v10', () => {
+    const state = normalizeState({ version: 10, translation: { enabled: false, targetLanguage: '中文' }, aiTranslations: {} });
+    expect(state.version).toBe(CURRENT_STATE_VERSION);
+    expect(state.organization).toEqual({ enabled: false, targetLanguage: '中文' });
+    expect(state.aiOrganizations).toEqual({});
   });
 });

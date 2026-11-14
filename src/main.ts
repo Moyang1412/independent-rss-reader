@@ -19,6 +19,8 @@ import { READER_VIEW_TYPE, ReaderView } from './view';
 import { createObsidianDeepSeekClient } from './ai/deepseek-obsidian';
 import { createObsidianDeepSeekAsrClient } from './ai/deepseek-asr-obsidian';
 import type { DeepSeekAsrResult } from './ai/deepseek-asr';
+import { createObsidianRemoteRegistry } from './remote/obsidian';
+import { mergeRemoteSnapshot, remoteSubscriptionKey } from './remote/adapter';
 
 function unique(values: string[]) { return [...new Set(values)]; }
 
@@ -26,6 +28,7 @@ export default class LocalRssPlugin extends Plugin {
   state!: StoredState;
   private refreshTimer?: number;
   private readonly refreshing = new Set<string>();
+  readonly remoteAdapters = createObsidianRemoteRegistry();
 
   override async onload() {
     const raw: unknown = await this.loadData();
@@ -63,6 +66,7 @@ export default class LocalRssPlugin extends Plugin {
     } });
     this.addCommand({ id: 'import-opml', name: '导入 OPML', callback: () => this.openImportOpml() });
     this.addCommand({ id: 'export-opml', name: '导出 OPML', callback: () => { void this.exportSubscriptions(); } });
+    this.addCommand({ id: 'sync-remote-read-only', name: '同步远程只读订阅', callback: () => { void this.syncRemoteReadOnly(); } });
     this.addSettingTab(new ReaderSettingsTab(this.app, this));
     this.app.workspace.onLayoutReady(() => {
       if (this.state.refresh.refreshOnOpen) void this.refreshSubscriptions({ automatic: true, reason: 'open' });
@@ -93,10 +97,35 @@ export default class LocalRssPlugin extends Plugin {
   openAddSubscription() { new AddFeedModal(this).open(); }
   openEditSubscription(id: string) {
     const subscription = this.state.subscriptions.find(item => item.id === id);
+    if (subscription?.remote) { new Notice('远程只读订阅不能编辑'); return; }
     if (subscription) new EditFeedModal(this, subscription).open();
   }
   openImportOpml() { new ImportOpmlModal(this).open(); }
   openArticleKnowledge(entry: FeedEntry) { new ArticleKnowledgeModal(this, entry).open(); }
+
+  async syncRemoteReadOnly() {
+    if (!this.state.remote.enabled) { new Notice('请先在设置中启用远程只读适配器'); return; }
+    if (!this.state.remote.baseUrl.trim()) { new Notice('请先填写远程只读服务地址'); return; }
+    const notice = new Notice('正在同步远程只读订阅…', 0);
+    try {
+      const adapter = this.remoteAdapters.create(this.state.remote);
+      const snapshots = await adapter.listSubscriptions();
+      const existingRemote = new Map(this.state.subscriptions.filter(item => item.remote).map(item => [item.id, item]));
+      const remoteSubscriptions = snapshots.map(snapshot => mergeRemoteSnapshot(existingRemote.get(remoteSubscriptionKey(this.state.remote.adapterId, snapshot.id)), snapshot, this.state.remote.adapterId));
+      const returnedIds = new Set(remoteSubscriptions.map(item => item.id));
+      for (const existing of existingRemote.values()) {
+        if (!returnedIds.has(existing.id)) remoteSubscriptions.push({ ...existing, error: '远程服务未返回该订阅' });
+      }
+      this.state.subscriptions = [...this.state.subscriptions.filter(item => !item.remote), ...remoteSubscriptions];
+      if (!this.state.selectedSubscriptionId && remoteSubscriptions[0]) this.state.selectedSubscriptionId = remoteSubscriptions[0].id;
+      await this.persist();
+      notice.hide();
+      new Notice(`远程只读同步完成：${snapshots.length} 个订阅`);
+    } catch (error) {
+      notice.hide();
+      new Notice(error instanceof Error ? error.message : '远程只读同步失败');
+    }
+  }
 
   async persist() { await this.saveData(this.state); this.refreshViews(); }
 
@@ -281,12 +310,14 @@ export default class LocalRssPlugin extends Plugin {
 
   openDeleteSubscription(id: string) {
     const subscription = this.state.subscriptions.find(item => item.id === id);
+    if (subscription?.remote) { new Notice('远程只读订阅不能删除'); return; }
     if (subscription) new DeleteFeedModal(this, subscription).open();
   }
 
   async removeSubscription(id: string, keepEntries = false) {
     const subscription = this.state.subscriptions.find(item => item.id === id);
     if (!subscription) return;
+    if (subscription.remote) { new Notice('远程只读订阅不能删除'); return; }
     if (keepEntries) {
       this.state.savedEntries = mergeSavedEntries(this.state.savedEntries, subscription.entries);
     }
@@ -297,6 +328,7 @@ export default class LocalRssPlugin extends Plugin {
   }
 
   async reorderSubscriptions(sourceId: string, targetId: string) {
+    if (this.state.subscriptions.some(item => (item.id === sourceId || item.id === targetId) && item.remote)) return;
     this.state.subscriptions = moveSubscription(this.state.subscriptions, sourceId, targetId);
     await this.persist();
   }
@@ -304,6 +336,8 @@ export default class LocalRssPlugin extends Plugin {
   async updateSubscription(id: string, rawUrl: string, requestedName = '', requestedGroup = '', requestedCacheLimit?: number) {
     const subscription = this.state.subscriptions.find(item => item.id === id);
     if (!subscription) throw new Error('订阅不存在');
+    if (subscription.remote) throw new Error('远程只读订阅不能编辑');
+    if (subscription.remote) throw new Error('远程只读订阅不能编辑');
     const url = normalizeFeedUrl(rawUrl);
     const duplicate = this.state.subscriptions.find(item => item.id !== id && item.url === url);
     if (duplicate) throw new Error('这个订阅已经存在');
@@ -333,6 +367,7 @@ export default class LocalRssPlugin extends Plugin {
   async toggleSubscriptionPaused(id: string) {
     const subscription = this.state.subscriptions.find(item => item.id === id);
     if (!subscription) return;
+    if (subscription.remote) { new Notice('远程只读订阅不能暂停'); return; }
     subscription.paused = !subscription.paused;
     await this.persist();
   }
@@ -340,6 +375,7 @@ export default class LocalRssPlugin extends Plugin {
   async checkSubscriptionHealth(id: string, notify = true) {
     const subscription = this.state.subscriptions.find(item => item.id === id);
     if (!subscription) return false;
+    if (subscription.remote) { if (notify) new Notice('远程只读订阅请使用远程同步'); return false; }
     try {
       const result = await fetchFeed(subscription.url);
       subscription.url = result.url;
@@ -371,16 +407,17 @@ export default class LocalRssPlugin extends Plugin {
     let healthy = 0;
     let failed = 0;
     for (const subscription of this.state.subscriptions) {
-      if (subscription.paused) continue;
+      if (subscription.paused || subscription.remote) continue;
       if (await this.checkSubscriptionHealth(subscription.id, false)) healthy += 1;
       else failed += 1;
     }
     notice.hide();
-    const skipped = this.state.subscriptions.filter(subscription => subscription.paused).length;
-    new Notice(`健康检查完成：${healthy} 个正常，${failed} 个异常${skipped ? `，跳过 ${skipped} 个暂停订阅` : ''}`);
+    const skipped = this.state.subscriptions.filter(subscription => subscription.paused || subscription.remote).length;
+    new Notice(`健康检查完成：${healthy} 个正常，${failed} 个异常${skipped ? `，跳过 ${skipped} 个暂停或远程订阅` : ''}`);
   }
 
   private async refreshSubscription(subscription: Subscription, automatic = false) {
+    if (subscription.remote) return { success: false, newCount: 0, skipped: true };
     const now = Date.now();
     if (!shouldAttemptSubscription(subscription, automatic, now) || this.refreshing.has(subscription.id)) {
       return { success: false, newCount: 0, skipped: true };
@@ -427,6 +464,7 @@ export default class LocalRssPlugin extends Plugin {
   async refreshOneSubscription(id: string) {
     const subscription = this.state.subscriptions.find(item => item.id === id);
     if (!subscription) return;
+    if (subscription.remote) { new Notice('远程只读订阅请使用远程同步'); return; }
     if (subscription.paused) { new Notice('这个订阅已暂停'); return; }
     const notice = new Notice(`正在刷新“${subscription.name}”…`, 0);
     const result = await this.refreshSubscription(subscription, false);
@@ -478,7 +516,7 @@ export default class LocalRssPlugin extends Plugin {
   }
 
   async exportSubscriptions() {
-    const xml = exportOpml(this.state.subscriptions.map(subscription => ({ url: subscription.url, name: subscription.name, group: subscription.group })));
+    const xml = exportOpml(this.state.subscriptions.filter(subscription => !subscription.remote).map(subscription => ({ url: subscription.url, name: subscription.name, group: subscription.group })));
     const path = normalizePath('RSS Exports/subscriptions.opml');
     const parent = path.split('/').slice(0, -1).join('/');
     if (parent && !(await this.app.vault.adapter.exists(parent))) await this.app.vault.createFolder(parent);
@@ -489,7 +527,8 @@ export default class LocalRssPlugin extends Plugin {
   }
 
   async refreshSubscriptions(options: { automatic?: boolean; reason?: 'open' | 'interval' } = {}) {
-    if (!this.state.subscriptions.length) { if (!options.automatic) new Notice('还没有订阅'); return; }
+    const localSubscriptions = this.state.subscriptions.filter(subscription => !subscription.remote);
+    if (!localSubscriptions.length) { if (!options.automatic) new Notice('还没有本地订阅'); return; }
     const automatic = options.automatic === true;
     const notice = automatic ? undefined : new Notice('正在刷新订阅…', 0);
     let success = 0;
@@ -498,6 +537,7 @@ export default class LocalRssPlugin extends Plugin {
     let newArticleCount = 0;
     const startedAt = Date.now();
     for (const subscription of this.state.subscriptions) {
+      if (subscription.remote) { skipped++; continue; }
       if (!shouldRefreshSubscription(subscription)) { skipped++; continue; }
       const result = await this.refreshSubscription(subscription, automatic);
       if (result.skipped) { skipped++; continue; }
@@ -512,10 +552,10 @@ export default class LocalRssPlugin extends Plugin {
       if (newArticleCount) new Notice(`发现 ${newArticleCount} 篇新文章`);
       return;
     }
-    const suffix = skipped ? `，跳过 ${skipped} 个已暂停订阅` : '';
+    const suffix = skipped ? `，跳过 ${skipped} 个暂停或远程订阅` : '';
     const failureSuffix = failed ? `，失败 ${failed} 个` : '';
     const newSuffix = newArticleCount ? `，新增 ${newArticleCount} 篇文章` : '';
-    new Notice(`已刷新 ${success}/${this.state.subscriptions.length} 个订阅${suffix}${failureSuffix}${newSuffix}`);
+    new Notice(`已刷新 ${success}/${localSubscriptions.length} 个本地订阅${suffix}${failureSuffix}${newSuffix}`);
   }
 
   toggleFavorite(id: string) {

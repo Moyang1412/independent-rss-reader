@@ -18,6 +18,10 @@ describe('state migrations', () => {
     expect(state.articleKnowledge).toEqual({});
     expect(state.knowledge.saveFolder).toBe('RSS Articles');
     expect(state.knowledge.dailyNoteTemplate).toContain('{{title}}');
+    expect(state.remote.enabled).toBe(false);
+    expect(state.remote.adapterId).toBe('json');
+    expect(state.remote.timeoutMs).toBe(15_000);
+    expect(state.remote).toEqual({ enabled: false, adapterId: 'json', baseUrl: '', apiKey: '', timeoutMs: 15_000 });
   });
 
   it('migrates legacy v1 data and removes the old daily note setting', () => {
@@ -43,6 +47,21 @@ describe('state migrations', () => {
     expect(state.subscriptions[0].entries[0].sourceId).toBe('guid:one');
     expect(state.subscriptions[0].healthStatus).toBe('warning');
     expect(state.subscriptions[0].healthError).toBe('发生重定向');
+  });
+
+  it('migrates stage 8 remote read-only settings and bindings', () => {
+    const state = normalizeState({ version: 8, remote: { enabled: true, adapterId: 'json', baseUrl: 'https://remote.example/api', apiKey: 'token', timeoutMs: 4_000 }, subscriptions: [{ id: 'remote:json:tech', url: 'https://remote.example/api/subscriptions/tech', name: '技术', group: '', entries: [], updatedAt: 0, lastAttemptAt: 0, remote: { adapterId: 'json', subscriptionId: 'tech', readOnly: true } }] });
+    expect(state.remote.enabled).toBe(true);
+    expect(state.remote.baseUrl).toBe('https://remote.example/api');
+    expect(state.subscriptions[0].remote?.readOnly).toBe(true);
+  });
+
+  it('migrates optional remote read-only settings and bindings', () => {
+    const state = normalizeState({ version: 8, remote: { enabled: true, adapterId: 'json', baseUrl: 'https://reader.example/api', apiKey: 'secret', timeoutMs: 2_000 }, subscriptions: [{ id: 'remote:json:team', url: 'https://reader.example/api/subscriptions/team', name: '团队', group: '', entries: [], updatedAt: 1, lastAttemptAt: 1, remote: { adapterId: 'json', subscriptionId: 'team', readOnly: true } }] });
+    expect(state.version).toBe(CURRENT_STATE_VERSION);
+    expect(state.remote.enabled).toBe(true);
+    expect(state.remote.baseUrl).toBe('https://reader.example/api');
+    expect(state.subscriptions[0].remote).toEqual({ adapterId: 'json', subscriptionId: 'team', readOnly: true });
   });
 
   it('rejects data from a future version', () => {

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.0 — 2026-11-15
+
+Add an optional remote read-only service adapter while keeping local RSS as the primary reading path.
+
+### Included
+
+- Add a registry for pluggable remote read-only adapters;
+- Add the built-in JSON adapter with GET-only subscription snapshot loading;
+- Validate remote URLs, JSON payloads, article fields, HTTP status, and request timeouts;
+- Keep remote subscriptions marked read-only and keep reading state, caching, notes, Markdown saves, and Daily Note writes local;
+- Add state migration to v9 for remote adapter settings and subscription bindings;
+- Keep the adapter disabled by default so local RSS reading works without a remote service.
+
 ## 0.8.0 — 2026-11-15
 
 Improve narrow-screen, mobile, accessibility, and large-list behavior.

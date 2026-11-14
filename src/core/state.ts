@@ -4,6 +4,14 @@ import { DEFAULT_DEEPSEEK_CONFIG } from '../ai/deepseek';
 import { DEFAULT_REFRESH_INTERVAL_MINUTES } from './refresh';
 import { DEFAULT_DAILY_NOTE_TEMPLATE, DEFAULT_SAVE_FOLDER, DEFAULT_SAVE_TEMPLATE } from './knowledge';
 
+export const DEFAULT_REMOTE_READ_ONLY_CONFIG = {
+  enabled: false,
+  adapterId: 'json',
+  baseUrl: '',
+  apiKey: '',
+  timeoutMs: 15_000,
+} as const;
+
 const rawStateSchema = z.looseObject({ version: z.number().int().nonnegative().optional() });
 
 function migratedObject(value: unknown): Record<string, unknown> {
@@ -22,6 +30,7 @@ function migratedObject(value: unknown): Record<string, unknown> {
   if (version < 6) data = { ...data, version: CURRENT_STATE_VERSION, cache: data.cache || {} };
   if (version < 7) data = { ...data, version: CURRENT_STATE_VERSION, articleKnowledge: data.articleKnowledge || {} };
   if (version < 8) data = { ...data, version: CURRENT_STATE_VERSION };
+  if (version < 9) data = { ...data, version: CURRENT_STATE_VERSION, remote: data.remote || {} };
   return data;
 }
 
@@ -41,6 +50,7 @@ const subscriptionSchema = z.object({
   lastAttemptAt: z.number().default(0), error: z.string().optional(), etag: z.string().optional(),
   lastModified: z.string().optional(), paused: z.boolean().default(false), site: z.string().optional(), image: z.string().optional(), siteDescription: z.string().optional(), language: z.string().optional(), generator: z.string().optional(),
   healthStatus: z.enum(['healthy', 'warning', 'error']).optional(), healthCheckedAt: z.number().optional(), healthError: z.string().optional(),
+  remote: z.object({ adapterId: z.string(), subscriptionId: z.string(), readOnly: z.literal(true) }).optional(),
   refreshFailureCount: z.number().int().nonnegative().default(0), nextRetryAt: z.number().nonnegative().default(0), lastNewCount: z.number().int().nonnegative().default(0),
   cacheLimit: z.number().int().min(1).max(10_000).default(50),
 });
@@ -83,6 +93,13 @@ export const stateSchema = z.object({
     model: z.string().default(DEFAULT_DEEPSEEK_CONFIG.model),
     timeoutMs: z.number().int().positive().default(DEFAULT_DEEPSEEK_CONFIG.timeoutMs),
   }).default(DEFAULT_DEEPSEEK_CONFIG),
+  remote: z.object({
+    enabled: z.boolean().default(DEFAULT_REMOTE_READ_ONLY_CONFIG.enabled),
+    adapterId: z.string().default(DEFAULT_REMOTE_READ_ONLY_CONFIG.adapterId),
+    baseUrl: z.string().default(DEFAULT_REMOTE_READ_ONLY_CONFIG.baseUrl),
+    apiKey: z.string().default(DEFAULT_REMOTE_READ_ONLY_CONFIG.apiKey),
+    timeoutMs: z.number().int().positive().default(DEFAULT_REMOTE_READ_ONLY_CONFIG.timeoutMs),
+  }).default(DEFAULT_REMOTE_READ_ONLY_CONFIG),
   aiSummaries: z.record(z.string(), z.object({
     text: z.string(),
     createdAt: z.number().default(0),
@@ -113,6 +130,7 @@ export function normalizeState(value: unknown): StoredState {
     knowledge: parsed.knowledge,
     query: parsed.query,
     deepseek: parsed.deepseek,
+    remote: parsed.remote,
     aiSummaries: parsed.aiSummaries,
     savedEntries: parsed.savedEntries,
   };

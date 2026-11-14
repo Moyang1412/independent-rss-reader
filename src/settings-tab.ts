@@ -41,6 +41,47 @@ export class ReaderSettingsTab extends PluginSettingTab {
     const lastRefresh = this.plugin.state.lastRefresh;
     new Setting(containerEl).setName('最近一次刷新').setDesc(lastRefresh.finishedAt ? `${new Date(lastRefresh.finishedAt).toLocaleString()}，成功 ${lastRefresh.successCount}，失败 ${lastRefresh.failedCount}，新增 ${lastRefresh.newArticleCount}` : '尚未刷新');
 
+    new Setting(containerEl).setName('远程只读服务').setHeading();
+    containerEl.createEl('p', { text: '远程适配器只使用 GET 读取订阅快照，并把结果缓存到本地阅读器。它不会写入远程服务；关闭后本地 RSS 阅读继续独立工作。' });
+    new Setting(containerEl).setName('启用远程只读适配器').setDesc('默认关闭。启用后可手动同步远程订阅。').addToggle(toggle => {
+      toggle.setValue(this.plugin.state.remote.enabled).onChange(async value => {
+        this.plugin.state.remote.enabled = value;
+        await this.plugin.persist();
+      });
+    });
+    new Setting(containerEl).setName('适配器').setDesc('可插拔适配器注册表中的只读实现。').addDropdown(dropdown => {
+      for (const id of this.plugin.remoteAdapters.list()) dropdown.addOption(id, id === 'json' ? 'HTTP JSON 只读服务' : id);
+      dropdown.setValue(this.plugin.state.remote.adapterId).onChange(async value => {
+        if (!this.plugin.remoteAdapters.has(value)) return;
+        this.plugin.state.remote.adapterId = value;
+        await this.plugin.persist();
+      });
+    });
+    new Setting(containerEl).setName('服务地址').setDesc('例如 https://example.com/api；适配器只请求 GET /subscriptions。').addText(text => {
+      text.setValue(this.plugin.state.remote.baseUrl).onChange(async value => {
+        this.plugin.state.remote.baseUrl = value.trim();
+        await this.plugin.persist();
+      });
+    });
+    new Setting(containerEl).setName('访问令牌（可选）').setDesc('只放在本地设置中，以 Bearer 令牌发送给远程服务。').addText(text => {
+      text.inputEl.type = 'password';
+      text.setValue(this.plugin.state.remote.apiKey).onChange(async value => {
+        this.plugin.state.remote.apiKey = value.trim();
+        await this.plugin.persist();
+      });
+    });
+    new Setting(containerEl).setName('请求超时（毫秒）').addText(text => {
+      text.setValue(String(this.plugin.state.remote.timeoutMs)).onChange(async value => {
+        const timeout = Number(value);
+        if (!Number.isFinite(timeout) || timeout < 1_000) return;
+        this.plugin.state.remote.timeoutMs = Math.round(timeout);
+        await this.plugin.persist();
+      });
+    });
+    new Setting(containerEl).setName('同步远程订阅').setDesc('把远程只读快照缓存到本地；远程条目仍可搜索、阅读、收藏和写入今日日记。').addButton(button => {
+      button.setButtonText('立即同步').onClick(() => { void this.plugin.syncRemoteReadOnly(); });
+    });
+
     new Setting(containerEl).setName('离线缓存').setHeading();
     containerEl.createEl('p', { text: '正文会随文章保存在本地。图片缓存写入插件目录，清理时会保留未读和收藏文章使用的图片。' });
     new Setting(containerEl).setName('缓存图片').setDesc('关闭后保留正文缓存，但不再下载新的图片。').addToggle(toggle => {

@@ -156,17 +156,19 @@ export class ReaderView extends ItemView {
         const selected = this.currentSubscription()?.id === subscription.id;
         const unreadCount = countUnreadEntries(subscription, this.plugin.state.readIds);
         const healthLabel = subscription.healthStatus === 'error' ? '，健康检查失败' : subscription.healthStatus === 'warning' ? '，健康检查警告' : '';
-        const row = section.createEl('button', { cls: 'lrr-source-row', attr: { type: 'button', 'aria-pressed': String(selected), 'aria-label': `${subscription.name || subscription.url}，${unreadCount} 篇未读${subscription.paused ? '，已暂停' : ''}${healthLabel}` } });
+        const remoteLabel = subscription.remote ? '，远程只读' : '';
+        const row = section.createEl('button', { cls: 'lrr-source-row', attr: { type: 'button', 'aria-pressed': String(selected), 'aria-label': `${subscription.name || subscription.url}，${unreadCount} 篇未读${subscription.paused ? '，已暂停' : ''}${healthLabel}${remoteLabel}` } });
         const isSaved = subscription.id === SAVED_ENTRIES_SUBSCRIPTION_ID;
         if (!isSaved && subscription.image) {
           const icon = row.createEl('img', { cls: 'lrr-source-icon', attr: { src: subscription.image, alt: '', 'aria-hidden': 'true' } });
           icon.addEventListener('error', () => icon.remove(), { once: true });
         }
         row.createSpan({ text: subscription.name || subscription.url, cls: 'lrr-source-name' });
-        row.draggable = !isSaved;
+        row.draggable = !isSaved && !subscription.remote;
         const unread = unreadCount;
         const meta = row.createSpan({ cls: 'lrr-source-meta' });
         meta.createSpan({ text: `${unread} 未读`, cls: 'lrr-source-unread' });
+        if (subscription.remote) meta.createSpan({ text: '远程只读', cls: 'lrr-source-state' });
         if (subscription.paused) meta.createSpan({ text: '已暂停', cls: 'lrr-source-state' });
         else if (subscription.error) {
           const retryText = subscription.nextRetryAt ? `，${new Date(subscription.nextRetryAt).toLocaleTimeString()} 重试` : '';
@@ -190,7 +192,7 @@ export class ReaderView extends ItemView {
           void this.plugin.persist();
           this.render();
         };
-        if (!isSaved) {
+        if (!isSaved && !subscription.remote) {
           row.ondragstart = event => { event.dataTransfer?.setData('text/plain', subscription.id); if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'; };
           row.ondragover = event => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'; };
           row.ondrop = event => { event.preventDefault(); const sourceId = event.dataTransfer?.getData('text/plain'); if (sourceId && sourceId !== subscription.id) void this.plugin.reorderSubscriptions(sourceId, subscription.id); };
@@ -199,12 +201,16 @@ export class ReaderView extends ItemView {
           event.preventDefault();
           if (isSaved) return;
           const menu = new Menu();
-          menu.addItem(item => item.setTitle('编辑订阅').setIcon('pencil').onClick(() => this.plugin.openEditSubscription(subscription.id)));
-          menu.addItem(item => item.setTitle(subscription.paused ? '恢复订阅' : '暂停订阅').setIcon(subscription.paused ? 'play' : 'pause').onClick(() => { void this.plugin.toggleSubscriptionPaused(subscription.id); }));
-          menu.addItem(item => item.setTitle('刷新此订阅').setIcon('refresh-cw').onClick(() => { void this.plugin.refreshOneSubscription(subscription.id); }));
-          menu.addItem(item => item.setTitle('检查订阅健康状态').setIcon('heart-pulse').onClick(() => { void this.plugin.checkSubscriptionHealth(subscription.id); }));
-          menu.addSeparator();
-          menu.addItem(item => item.setTitle('删除订阅').setIcon('trash').onClick(() => this.plugin.openDeleteSubscription(subscription.id)));
+          if (subscription.remote) {
+            menu.addItem(item => item.setTitle('同步远程只读订阅').setIcon('download').onClick(() => { void this.plugin.syncRemoteReadOnly(); }));
+          } else {
+            menu.addItem(item => item.setTitle('编辑订阅').setIcon('pencil').onClick(() => this.plugin.openEditSubscription(subscription.id)));
+            menu.addItem(item => item.setTitle(subscription.paused ? '恢复订阅' : '暂停订阅').setIcon(subscription.paused ? 'play' : 'pause').onClick(() => { void this.plugin.toggleSubscriptionPaused(subscription.id); }));
+            menu.addItem(item => item.setTitle('刷新此订阅').setIcon('refresh-cw').onClick(() => { void this.plugin.refreshOneSubscription(subscription.id); }));
+            menu.addItem(item => item.setTitle('检查订阅健康状态').setIcon('heart-pulse').onClick(() => { void this.plugin.checkSubscriptionHealth(subscription.id); }));
+            menu.addSeparator();
+            menu.addItem(item => item.setTitle('删除订阅').setIcon('trash').onClick(() => this.plugin.openDeleteSubscription(subscription.id)));
+          }
           menu.showAtMouseEvent(event);
         };
       }

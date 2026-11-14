@@ -1,6 +1,6 @@
 import type { DeepSeekConfig } from '../ai/deepseek';
 
-export const CURRENT_STATE_VERSION = 8 as const;
+export const CURRENT_STATE_VERSION = 9 as const;
 export const SAVED_ENTRIES_SUBSCRIPTION_ID = '__saved_entries__';
 
 export type FeedFormat = 'rss' | 'rdf' | 'atom';
@@ -64,6 +64,21 @@ export interface Subscription {
   healthStatus?: 'healthy' | 'warning' | 'error';
   healthCheckedAt?: number;
   healthError?: string;
+  remote?: RemoteSubscriptionBinding;
+}
+
+export interface RemoteSubscriptionBinding {
+  adapterId: string;
+  subscriptionId: string;
+  readOnly: true;
+}
+
+export interface RemoteReadOnlyConfig {
+  enabled: boolean;
+  adapterId: string;
+  baseUrl: string;
+  apiKey: string;
+  timeoutMs: number;
 }
 
 export interface RefreshConfig {
@@ -120,6 +135,7 @@ export interface StoredState {
   knowledge: KnowledgeConfig;
   query: string;
   deepseek: DeepSeekConfig;
+  remote: RemoteReadOnlyConfig;
   aiSummaries: Record<string, AiSummary>;
   savedEntries: FeedEntry[];
 }

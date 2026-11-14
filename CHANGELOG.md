@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.0 — 2026-11-15
+
+Improve narrow-screen, mobile, accessibility, and large-list behavior.
+
+### Included
+
+- Add container-query layouts for narrow panels and 320px-wide screens;
+- Use larger 44px touch targets on coarse-pointer devices;
+- Add skip-to-article-list navigation, main landmarks, accessible names, live status, and visible focus rings;
+- Add `Home` and `End` keyboard navigation alongside existing `j`/`k`, arrow keys, and `r` shortcuts;
+- Window the article list with a fixed-height virtual rendering range and overscan;
+- Preserve article selection, filtering, batch actions, and keyboard navigation while virtualized;
+- Respect Obsidian light/dark themes and native color-scheme controls.
+
 ## 0.7.0 — 2026-11-15
 
 Improve RSS/Atom compatibility and subscription diagnostics.

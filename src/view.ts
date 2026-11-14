@@ -5,6 +5,7 @@ import { sanitizeArticleHtml } from './core/feed-parser';
 import { MicrophoneRecorder } from './audio/recorder';
 import { countUnreadEntries } from './core/subscriptions';
 import { adjacentEntryId, filterRecentEntries, getLastReadPosition, RECENT_DAYS, rememberLastReadPosition, sortEntriesByPublishedAt, type SortOrder } from './core/reading';
+import { virtualWindowRange } from './core/virtual-list';
 
 export const READER_VIEW_TYPE = 'independent-rss-reader-view';
 
@@ -56,7 +57,7 @@ export class ReaderView extends ItemView {
     this.contentEl.empty();
     this.contentEl.addClass('lrr-view');
     this.contentEl.tabIndex = 0;
-    this.contentEl.setAttribute('aria-keyshortcuts', 'j k ArrowUp ArrowDown r');
+    this.contentEl.setAttribute('aria-keyshortcuts', 'j k ArrowUp ArrowDown Home End r');
     this.registerDomEvent(this.contentEl, 'keydown', event => this.handleKeydown(event));
     const shell = this.contentEl.createDiv({ cls: 'lrr-shell' });
     const header = shell.createEl('header', { cls: 'lrr-header' });
@@ -70,14 +71,15 @@ export class ReaderView extends ItemView {
     setIcon(refresh, 'refresh-cw');
     refresh.onclick = () => { void this.plugin.refreshSubscriptions(); };
 
-    const body = shell.createDiv({ cls: 'lrr-body' });
+    shell.createEl('a', { text: '跳到文章列表', cls: 'lrr-skip-link', href: '#lrr-article-list' });
+    const body = shell.createEl('main', { cls: 'lrr-body', attr: { 'aria-label': 'RSS 阅读器内容' } });
     const nav = body.createEl('nav', { cls: 'lrr-sources', attr: { 'aria-label': '订阅源' } });
     nav.createEl('h2', { text: '订阅' });
     this.sourceList = nav.createDiv({ cls: 'lrr-source-list' });
     const center = body.createDiv({ cls: 'lrr-center' });
     const searchWrap = center.createEl('search', { cls: 'lrr-search' });
     const searchRow = searchWrap.createDiv({ cls: 'lrr-search-row' });
-    this.search = searchRow.createEl('input', { type: 'search', placeholder: '搜索文章', attr: { 'aria-label': '搜索文章' } });
+    this.search = searchRow.createEl('input', { type: 'search', placeholder: '搜索文章', attr: { 'aria-label': '搜索文章', 'aria-controls': 'lrr-article-list' } });
     this.search.oninput = () => this.renderArticles();
     const voice = searchRow.createEl('button', { text: '选择音频', attr: { type: 'button', 'aria-label': '选择音频进行 DeepSeek 语音搜索' } });
     this.voiceButton = voice;
@@ -115,7 +117,8 @@ export class ReaderView extends ItemView {
     };
     this.batchBar = center.createDiv({ cls: 'lrr-batch-actions', attr: { role: 'toolbar', 'aria-label': '批量文章操作' } });
     this.status = center.createDiv({ cls: 'lrr-status', attr: { role: 'status', 'aria-live': 'polite' } });
-    this.articleList = center.createDiv({ cls: 'lrr-article-list' });
+    this.articleList = center.createDiv({ cls: 'lrr-article-list', attr: { id: 'lrr-article-list', role: 'list', 'aria-label': '文章列表', 'aria-busy': 'false', tabindex: '-1' } });
+    this.registerDomEvent(this.articleList, 'scroll', () => this.renderArticles());
     this.article = body.createEl('article', { cls: 'lrr-article', attr: { 'aria-live': 'polite' } });
     this.render();
     this.contentEl.focus({ preventScroll: true });
@@ -150,7 +153,10 @@ export class ReaderView extends ItemView {
       const section = this.sourceList.createEl('section', { cls: 'lrr-source-group' });
       section.createEl('h3', { text: group });
       for (const subscription of subscriptions) {
-        const row = section.createEl('button', { cls: 'lrr-source-row', attr: { type: 'button', 'aria-pressed': String(this.currentSubscription()?.id === subscription.id) } });
+        const selected = this.currentSubscription()?.id === subscription.id;
+        const unreadCount = countUnreadEntries(subscription, this.plugin.state.readIds);
+        const healthLabel = subscription.healthStatus === 'error' ? '，健康检查失败' : subscription.healthStatus === 'warning' ? '，健康检查警告' : '';
+        const row = section.createEl('button', { cls: 'lrr-source-row', attr: { type: 'button', 'aria-pressed': String(selected), 'aria-label': `${subscription.name || subscription.url}，${unreadCount} 篇未读${subscription.paused ? '，已暂停' : ''}${healthLabel}` } });
         const isSaved = subscription.id === SAVED_ENTRIES_SUBSCRIPTION_ID;
         if (!isSaved && subscription.image) {
           const icon = row.createEl('img', { cls: 'lrr-source-icon', attr: { src: subscription.image, alt: '', 'aria-hidden': 'true' } });
@@ -158,7 +164,7 @@ export class ReaderView extends ItemView {
         }
         row.createSpan({ text: subscription.name || subscription.url, cls: 'lrr-source-name' });
         row.draggable = !isSaved;
-        const unread = countUnreadEntries(subscription, this.plugin.state.readIds);
+        const unread = unreadCount;
         const meta = row.createSpan({ cls: 'lrr-source-meta' });
         meta.createSpan({ text: `${unread} 未读`, cls: 'lrr-source-unread' });
         if (subscription.paused) meta.createSpan({ text: '已暂停', cls: 'lrr-source-state' });
@@ -324,31 +330,59 @@ export class ReaderView extends ItemView {
         event.preventDefault();
         void this.plugin.refreshOneSubscription(subscription.id);
       }
+      return;
+    }
+    if (key === 'home' || key === 'end') {
+      const entries = this.visibleEntries();
+      const target = key === 'home' ? entries[0] : entries[entries.length - 1];
+      if (target && this.selectEntry(target.id)) event.preventDefault();
     }
   }
 
   private renderArticles() {
     this.updateSortButton();
     this.renderBatchActions();
+    const previousScrollTop = this.articleList.scrollTop;
     this.articleList.empty();
     const entries = this.visibleEntries();
     this.status.setText(entries.length ? `${entries.length} 篇文章` : '没有符合条件的文章');
+    this.articleList.setAttribute('aria-setsize', String(entries.length));
+    this.articleList.setAttribute('aria-busy', 'true');
+    if (!entries.length) {
+      this.articleList.setAttribute('aria-busy', 'false');
+      return;
+    }
     const subscription = this.currentSubscription();
-    for (const entry of entries) {
-      const wrapper = this.articleList.createDiv({ cls: 'lrr-article-select-row' });
+    const rowHeight = 56;
+    const selectedIndex = entries.findIndex(entry => entry.id === this.selectedId);
+    const range = virtualWindowRange(entries.length, previousScrollTop, this.articleList.clientHeight || 480, rowHeight, 8, selectedIndex);
+    const spacer = this.articleList.createDiv({ cls: 'lrr-virtual-spacer', attr: { 'aria-hidden': 'true' } });
+    spacer.style.height = `${range.totalHeight}px`;
+    const windowEl = this.articleList.createDiv({ cls: 'lrr-virtual-window' });
+    windowEl.style.transform = `translateY(${range.offset}px)`;
+    const safeScrollTop = Math.min(previousScrollTop, Math.max(0, range.totalHeight - (this.articleList.clientHeight || 480)));
+    if (safeScrollTop !== previousScrollTop) this.articleList.scrollTop = safeScrollTop;
+    for (let index = range.start; index < range.end; index += 1) {
+      const entry = entries[index];
+      const wrapper = this.articleList.createDiv({ cls: 'lrr-article-select-row', attr: { role: 'listitem', 'aria-setsize': String(entries.length), 'aria-posinset': String(index + 1) } });
       if (this.selectionMode) {
         const checkbox = wrapper.createEl('input', { type: 'checkbox', attr: { 'aria-label': `选择文章：${entry.title}` } });
         checkbox.checked = this.selectedIds.has(entry.id);
         checkbox.onclick = event => { event.stopPropagation(); this.toggleSelected(entry.id); };
       }
-      const row = wrapper.createEl('button', { cls: 'lrr-article-row', attr: { type: 'button', 'aria-pressed': String(this.selectedId === entry.id) } });
+      const source = this.sourceLabel(entry, subscription);
+      const date = entry.publishedAt ? new Date(entry.publishedAt).toLocaleDateString() : '';
+      const unread = !this.plugin.state.readIds.includes(entry.id);
+      const row = wrapper.createEl('button', { cls: 'lrr-article-row', attr: { type: 'button', 'aria-pressed': String(this.selectedId === entry.id), 'aria-label': `${entry.title}，来源 ${source}${date ? `，${date}` : ''}${unread ? '，未读' : ''}` } });
       row.createSpan({ text: entry.title, cls: 'lrr-article-title' });
-      row.createSpan({ text: this.sourceLabel(entry, subscription), cls: 'lrr-article-source' });
-      row.createSpan({ text: entry.publishedAt ? new Date(entry.publishedAt).toLocaleDateString() : '', cls: 'lrr-article-date' });
-      if (!this.plugin.state.readIds.includes(entry.id)) row.addClass('is-unread');
+      row.createSpan({ text: source, cls: 'lrr-article-source' });
+      row.createSpan({ text: date, cls: 'lrr-article-date' });
+      if (unread) row.addClass('is-unread');
       if (this.plugin.state.favoriteIds.includes(entry.id)) row.createSpan({ text: '★', cls: 'lrr-article-mark', attr: { 'aria-label': '已收藏' } });
       row.onclick = () => { this.selectEntry(entry.id); };
+      windowEl.appendChild(wrapper);
     }
+    this.articleList.setAttribute('aria-busy', 'false');
   }
 
   private renderArticle() {
@@ -423,8 +457,8 @@ export class ReaderView extends ItemView {
   private updateAudioButtons() {
     if (this.destroyed) return;
     const enabled = this.plugin.canUseDeepSeek();
-    if (this.voiceButton) { this.voiceButton.disabled = !enabled; this.voiceButton.setText('选择音频'); }
-    if (this.recordButton) { this.recordButton.disabled = !enabled; this.recordButton.setText('开始录音'); }
+    if (this.voiceButton) { this.voiceButton.disabled = !enabled; this.voiceButton.setText('选择音频'); this.voiceButton.setAttribute('aria-label', '选择音频进行 DeepSeek 语音搜索'); }
+    if (this.recordButton) { this.recordButton.disabled = !enabled; this.recordButton.setText('开始录音'); this.recordButton.setAttribute('aria-label', '开始麦克风录音'); }
   }
 
   private async submitAudio(audio: Blob, filename: string) {

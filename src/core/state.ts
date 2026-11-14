@@ -21,6 +21,7 @@ function migratedObject(value: unknown): Record<string, unknown> {
   if (version < 5) data = { ...data, version: CURRENT_STATE_VERSION, refresh: data.refresh || {}, lastRefresh: data.lastRefresh || {} };
   if (version < 6) data = { ...data, version: CURRENT_STATE_VERSION, cache: data.cache || {} };
   if (version < 7) data = { ...data, version: CURRENT_STATE_VERSION, articleKnowledge: data.articleKnowledge || {} };
+  if (version < 8) data = { ...data, version: CURRENT_STATE_VERSION };
   return data;
 }
 
@@ -33,12 +34,13 @@ export function needsStateMigration(value: unknown): boolean {
 const subscriptionSchema = z.object({
   id: z.string(), url: z.string(), name: z.string(), group: z.string().default(''),
   entries: z.array(z.object({
-    id: z.string(), feedUrl: z.string(), title: z.string(), link: z.string().optional(), author: z.string().optional(),
+    id: z.string(), sourceId: z.string().optional(), feedUrl: z.string(), title: z.string(), link: z.string().optional(), author: z.string().optional(),
     summary: z.string().default(''), content: z.string().default(''), publishedAt: z.number().optional(),
-    publishedText: z.string().optional(), imageUrl: z.string().optional(), cachedImages: z.record(z.string(), z.string()).optional(), cachedAt: z.number().optional(),
+    publishedText: z.string().optional(), imageUrl: z.string().optional(), categories: z.array(z.string()).optional(), commentsUrl: z.string().optional(), mediaUrl: z.string().optional(), mediaType: z.string().optional(), cachedImages: z.record(z.string(), z.string()).optional(), cachedAt: z.number().optional(),
   })).default([]), updatedAt: z.number().default(0),
   lastAttemptAt: z.number().default(0), error: z.string().optional(), etag: z.string().optional(),
-  lastModified: z.string().optional(), paused: z.boolean().default(false), site: z.string().optional(), image: z.string().optional(),
+  lastModified: z.string().optional(), paused: z.boolean().default(false), site: z.string().optional(), image: z.string().optional(), siteDescription: z.string().optional(), language: z.string().optional(), generator: z.string().optional(),
+  healthStatus: z.enum(['healthy', 'warning', 'error']).optional(), healthCheckedAt: z.number().optional(), healthError: z.string().optional(),
   refreshFailureCount: z.number().int().nonnegative().default(0), nextRetryAt: z.number().nonnegative().default(0), lastNewCount: z.number().int().nonnegative().default(0),
   cacheLimit: z.number().int().min(1).max(10_000).default(50),
 });
@@ -87,9 +89,9 @@ export const stateSchema = z.object({
     model: z.string().default(''),
   })).default({}),
   savedEntries: z.array(z.object({
-    id: z.string(), feedUrl: z.string(), title: z.string(), link: z.string().optional(), author: z.string().optional(),
+    id: z.string(), sourceId: z.string().optional(), feedUrl: z.string(), title: z.string(), link: z.string().optional(), author: z.string().optional(),
     summary: z.string().default(''), content: z.string().default(''), publishedAt: z.number().optional(),
-    publishedText: z.string().optional(), imageUrl: z.string().optional(), cachedImages: z.record(z.string(), z.string()).optional(), cachedAt: z.number().optional(),
+    publishedText: z.string().optional(), imageUrl: z.string().optional(), categories: z.array(z.string()).optional(), commentsUrl: z.string().optional(), mediaUrl: z.string().optional(), mediaType: z.string().optional(), cachedImages: z.record(z.string(), z.string()).optional(), cachedAt: z.number().optional(),
   })).default([]),
 });
 

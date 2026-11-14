@@ -47,9 +47,31 @@ function xmlDocument(xml: string): XMLDocument {
   if (byteLength(xml) > MAX_XML_BYTES) throw new Error('订阅 XML 超过 5 MiB 限制');
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error('订阅 XML 不允许 DTD 或 ENTITY');
   const parsed = new DOMParser().parseFromString(xml, 'application/xml');
-  if (parsed.getElementsByTagName('parsererror').length) throw new Error('订阅 XML 格式无效');
+  const parserError = parsed.getElementsByTagName('parsererror')[0];
+  if (parserError) {
+    const detail = parserError.textContent?.replace(/\s+/g, ' ').trim().slice(0, 240);
+    throw new Error(detail ? `订阅 XML 格式无效：${detail}` : '订阅 XML 格式无效');
+  }
   if (!parsed.documentElement) throw new Error('订阅 XML 没有根元素');
   return parsed;
+}
+
+/** Find standard RSS/Atom alternate links on an HTML page. */
+export function discoverFeedUrls(html: string, pageUrl: string): string[] {
+  let base: string;
+  try { base = normalizeFeedUrl(pageUrl); } catch { throw new Error('发现订阅时页面地址无效'); }
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const discovered: string[] = [];
+  for (const node of Array.from(doc.querySelectorAll('link[rel], a[rel]'))) {
+    const rel = (node.getAttribute('rel') || '').toLowerCase().split(/\s+/).filter(Boolean);
+    const type = (node.getAttribute('type') || '').toLowerCase();
+    const isFeedType = /application\/(?:rss|atom)\+xml|application\/rdf\+xml|text\/xml/.test(type);
+    if (!rel.includes('alternate') && !rel.includes('feed') && !isFeedType) continue;
+    if (!isFeedType && !rel.includes('alternate') && !rel.includes('feed')) continue;
+    const href = safeUrl(node.getAttribute('href') || node.getAttribute('data-href') || undefined, base);
+    if (href && !discovered.includes(href)) discovered.push(href);
+  }
+  return discovered;
 }
 
 const ALLOWED_TAGS = [
@@ -154,11 +176,37 @@ function imageOf(item: Element, base: string): string | undefined {
   return undefined;
 }
 
+function categoriesOf(item: Element, atom: boolean): string[] | undefined {
+  const values = Array.from(item.children).filter(node => node.localName === 'category').map(node => {
+    return (atom ? node.getAttribute('term') || textOf(node) : textOf(node)).trim();
+  }).filter(Boolean);
+  return values.length ? [...new Set(values)] : undefined;
+}
+
+function mediaOf(item: Element, base: string): { url?: string; type?: string } {
+  for (const node of Array.from(item.getElementsByTagName('*'))) {
+    const name = node.localName.toLowerCase();
+    if (name !== 'content' && name !== 'enclosure') continue;
+    const candidate = node.getAttribute('url') || node.getAttribute('href');
+    const type = node.getAttribute('type') || '';
+    const url = safeUrl(candidate || undefined, base);
+    if (url && type && !type.startsWith('image/')) return { url, type };
+    if (url && name === 'enclosure') return { url, type: type || undefined };
+  }
+  return {};
+}
+
 function formatOf(root: Element): FeedFormat {
   if (root.localName === 'feed') return 'atom';
   if (root.localName === 'RDF' || root.localName === 'rdf') return 'rdf';
   if (root.localName === 'rss') return 'rss';
   throw new Error('只支持 RSS、RDF 和 Atom 订阅');
+}
+
+function nextUrlOf(root: Element, base: string): string | undefined {
+  const links = Array.from(root.getElementsByTagName('*')).filter(node => node.localName === 'link');
+  const next = links.find(link => (link.getAttribute('rel') || '').toLowerCase() === 'next');
+  return safeUrl(next?.getAttribute('href') || textOf(next), base);
 }
 
 function entriesOf(root: Element, format: FeedFormat): Element[] {
@@ -199,6 +247,10 @@ export function parseFeed(xml: string, rawUrl: string): ParsedFeed {
   const imageUrl = atom
     ? safeUrl(textOf(firstChild(root, 'logo')) || textOf(firstChild(root, 'icon')), url)
     : safeUrl(textOf(firstChild(firstChild(channel, 'image') || channel, 'url')), siteUrl || url);
+  const coverOrIcon = imageUrl || safeUrl('/favicon.ico', siteUrl || url);
+  const description = plainText(atom ? textOf(firstChild(root, 'subtitle')) : textOf(firstChild(channel, 'description'))).slice(0, 500) || undefined;
+  const language = textOf(firstChild(channel, 'language')) || undefined;
+  const generator = textOf(firstChild(channel, 'generator')) || undefined;
 
   const entries: FeedEntry[] = [];
   const seen = new Set<string>();
@@ -213,14 +265,16 @@ export function parseFeed(xml: string, rawUrl: string): ParsedFeed {
     if (seen.has(id)) continue;
     const content = sanitizeArticleHtml(rawContent.slice(0, MAX_ENTRY_CONTENT_CHARS), link || url);
     const date = dateOf(published);
-    const entry: FeedEntry = { id, feedUrl: url, title: titleValue, link, author: authorOf(item), summary: plainText(rawContent).slice(0, 240), content, ...date, imageUrl: imageOf(item, link || url) };
+    const media = mediaOf(item, link || url);
+    const commentsUrl = safeUrl(textOf(firstChild(item, 'comments')), link || url);
+    const entry: FeedEntry = { id, sourceId: identity, feedUrl: url, title: titleValue, link, author: authorOf(item), summary: plainText(rawContent).slice(0, 240), content, ...date, imageUrl: imageOf(item, link || url), categories: categoriesOf(item, atom), commentsUrl, mediaUrl: media.url, mediaType: media.type };
     const nextBytes = storedBytes + byteLength(JSON.stringify(entry));
     if (nextBytes > MAX_FEED_BYTES && entries.length > 0) break;
     entries.push(entry); seen.add(id); storedBytes = nextBytes;
     if (entries.length >= MAX_ENTRIES) break;
   }
   entries.sort((left, right) => (right.publishedAt || 0) - (left.publishedAt || 0));
-  return { url, format, title, site: siteUrl, image: imageUrl, siteUrl, imageUrl, entries };
+  return { url, format, title, site: siteUrl, image: coverOrIcon, siteUrl, imageUrl: coverOrIcon, description, language, generator, nextUrl: nextUrlOf(root, url), entries };
 }
 
 function attr(node: Element, ...names: string[]): string {

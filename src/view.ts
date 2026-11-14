@@ -151,8 +151,12 @@ export class ReaderView extends ItemView {
       section.createEl('h3', { text: group });
       for (const subscription of subscriptions) {
         const row = section.createEl('button', { cls: 'lrr-source-row', attr: { type: 'button', 'aria-pressed': String(this.currentSubscription()?.id === subscription.id) } });
-        row.createSpan({ text: subscription.name || subscription.url, cls: 'lrr-source-name' });
         const isSaved = subscription.id === SAVED_ENTRIES_SUBSCRIPTION_ID;
+        if (!isSaved && subscription.image) {
+          const icon = row.createEl('img', { cls: 'lrr-source-icon', attr: { src: subscription.image, alt: '', 'aria-hidden': 'true' } });
+          icon.addEventListener('error', () => icon.remove(), { once: true });
+        }
+        row.createSpan({ text: subscription.name || subscription.url, cls: 'lrr-source-name' });
         row.draggable = !isSaved;
         const unread = countUnreadEntries(subscription, this.plugin.state.readIds);
         const meta = row.createSpan({ cls: 'lrr-source-meta' });
@@ -162,7 +166,14 @@ export class ReaderView extends ItemView {
           const retryText = subscription.nextRetryAt ? `，${new Date(subscription.nextRetryAt).toLocaleTimeString()} 重试` : '';
           meta.createSpan({ text: '更新失败', cls: 'lrr-source-error', attr: { title: `${subscription.error}${retryText}` } });
         }
+        if (subscription.healthStatus && subscription.healthStatus !== 'healthy') {
+          meta.createSpan({ text: subscription.healthStatus === 'warning' ? '健康检查警告' : '健康检查失败', cls: 'lrr-source-error', attr: { title: subscription.healthError || '请检查订阅地址' } });
+        }
         else if (subscription.updatedAt) meta.createSpan({ text: new Date(subscription.updatedAt).toLocaleDateString(), cls: 'lrr-source-date' });
+        if (!isSaved && (subscription.site || subscription.siteDescription || subscription.language || subscription.generator)) {
+          const details = [subscription.site, subscription.siteDescription, subscription.language && `语言：${subscription.language}`, subscription.generator && `生成器：${subscription.generator}`].filter(Boolean).join(' · ');
+          meta.createSpan({ text: '站点', cls: 'lrr-source-site', attr: { title: details } });
+        }
         if ((subscription.lastNewCount || 0) > 0) meta.createSpan({ text: `${subscription.lastNewCount} 新`, cls: 'lrr-source-new' });
         row.onclick = () => {
           this.plugin.state.selectedSubscriptionId = subscription.id;
@@ -185,6 +196,7 @@ export class ReaderView extends ItemView {
           menu.addItem(item => item.setTitle('编辑订阅').setIcon('pencil').onClick(() => this.plugin.openEditSubscription(subscription.id)));
           menu.addItem(item => item.setTitle(subscription.paused ? '恢复订阅' : '暂停订阅').setIcon(subscription.paused ? 'play' : 'pause').onClick(() => { void this.plugin.toggleSubscriptionPaused(subscription.id); }));
           menu.addItem(item => item.setTitle('刷新此订阅').setIcon('refresh-cw').onClick(() => { void this.plugin.refreshOneSubscription(subscription.id); }));
+          menu.addItem(item => item.setTitle('检查订阅健康状态').setIcon('heart-pulse').onClick(() => { void this.plugin.checkSubscriptionHealth(subscription.id); }));
           menu.addSeparator();
           menu.addItem(item => item.setTitle('删除订阅').setIcon('trash').onClick(() => this.plugin.openDeleteSubscription(subscription.id)));
           menu.showAtMouseEvent(event);
@@ -354,6 +366,7 @@ export class ReaderView extends ItemView {
     if (source) meta.createSpan({ text: `来源：${source}`, attr: { title: source } });
     if (entry.author) meta.createSpan({ text: entry.author });
     if (entry.publishedAt) meta.createSpan({ text: new Date(entry.publishedAt).toLocaleString() });
+    if (entry.categories?.length) meta.createSpan({ text: `分类：${entry.categories.join('、')}` });
     const knowledge = this.plugin.getArticleKnowledge(entry.id);
     if (knowledge.tags.length) meta.createSpan({ text: `标签：${knowledge.tags.map(tag => `#${tag}`).join(' ')}` });
     if (knowledge.note) meta.createSpan({ text: `备注：${knowledge.note}`, attr: { title: knowledge.note } });

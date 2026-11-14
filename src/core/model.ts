@@ -1,12 +1,13 @@
 import type { DeepSeekConfig } from '../ai/deepseek';
 
-export const CURRENT_STATE_VERSION = 7 as const;
+export const CURRENT_STATE_VERSION = 8 as const;
 export const SAVED_ENTRIES_SUBSCRIPTION_ID = '__saved_entries__';
 
 export type FeedFormat = 'rss' | 'rdf' | 'atom';
 
 export interface FeedEntry {
   id: string;
+  sourceId?: string;
   feedUrl: string;
   title: string;
   link?: string;
@@ -16,6 +17,10 @@ export interface FeedEntry {
   publishedAt?: number;
   publishedText?: string;
   imageUrl?: string;
+  categories?: string[];
+  commentsUrl?: string;
+  mediaUrl?: string;
+  mediaType?: string;
   cachedImages?: Record<string, string>;
   cachedAt?: number;
 }
@@ -28,6 +33,10 @@ export interface ParsedFeed {
   image?: string;
   siteUrl?: string;
   imageUrl?: string;
+  description?: string;
+  language?: string;
+  generator?: string;
+  nextUrl?: string;
   entries: FeedEntry[];
 }
 
@@ -49,6 +58,12 @@ export interface Subscription {
   cacheLimit?: number;
   site?: string;
   image?: string;
+  siteDescription?: string;
+  language?: string;
+  generator?: string;
+  healthStatus?: 'healthy' | 'warning' | 'error';
+  healthCheckedAt?: number;
+  healthError?: string;
 }
 
 export interface RefreshConfig {

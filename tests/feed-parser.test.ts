@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { exportOpml, normalizeFeedUrl, parseFeed, parseOpml, sanitizeArticleHtml } from '../src/core/feed-parser';
+import { discoverFeedUrls, exportOpml, normalizeFeedUrl, parseFeed, parseOpml, sanitizeArticleHtml } from '../src/core/feed-parser';
 
 let dom: JSDOM;
 
@@ -63,9 +63,45 @@ describe('parseFeed', () => {
     expect(feed.entries[0].summary).toBe('Summary');
   });
 
+  it('reads extension fields, pagination, and site metadata', () => {
+    const xml = `<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel>
+      <title>Extended</title><link>/site</link><description>Site description</description><language>zh-cn</language><generator>TestGen</generator>
+      <atom:link xmlns:atom="http://www.w3.org/2005/Atom" rel="next" href="/page/2.xml"/>
+      <item><title>Story</title><guid>story</guid><category>Tech</category><category>Tech</category><comments>/comments/1</comments>
+        <enclosure url="/audio.mp3" type="audio/mpeg"/><media:content url="/cover.jpg" medium="image" type="image/jpeg"/>
+      </item></channel></rss>`;
+    const feed = parseFeed(xml, 'https://example.com/feed.xml');
+    expect(feed.siteUrl).toBe('https://example.com/site');
+    expect(feed.description).toBe('Site description');
+    expect(feed.language).toBe('zh-cn');
+    expect(feed.generator).toBe('TestGen');
+    expect(feed.nextUrl).toBe('https://example.com/page/2.xml');
+    expect(feed.entries[0].categories).toEqual(['Tech']);
+    expect(feed.entries[0].commentsUrl).toBe('https://example.com/comments/1');
+    expect(feed.entries[0].mediaUrl).toBe('https://example.com/audio.mp3');
+    expect(feed.entries[0].mediaType).toBe('audio/mpeg');
+    expect(feed.entries[0].imageUrl).toBe('https://example.com/cover.jpg');
+  });
+
   it('rejects entity declarations and oversized XML', () => {
     expect(() => parseFeed('<!DOCTYPE rss [ <!ENTITY x "bad"> ]><rss/>', 'https://example.com/feed')).toThrow(/DTD|ENTITY/);
     expect(() => parseFeed(`<rss>${'x'.repeat(5 * 1024 * 1024)}</rss>`, 'https://example.com/feed')).toThrow(/5 MiB/);
+  });
+});
+
+describe('feed discovery', () => {
+  it('finds RSS, Atom, and RDF alternate links and resolves relative URLs', () => {
+    const html = `<html><head>
+      <link rel="alternate" type="application/rss+xml" href="/rss.xml">
+      <link rel="alternate" type="application/atom+xml" href="https://example.com/atom.xml#latest">
+      <link rel="alternate" type="application/rdf+xml" href="rdf.xml">
+      <link rel="stylesheet" href="style.css">
+    </head></html>`;
+    expect(discoverFeedUrls(html, 'https://example.com/blog/')).toEqual([
+      'https://example.com/rss.xml',
+      'https://example.com/atom.xml',
+      'https://example.com/blog/rdf.xml',
+    ]);
   });
 });
 

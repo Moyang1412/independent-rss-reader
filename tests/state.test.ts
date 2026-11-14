@@ -37,6 +37,14 @@ describe('state migrations', () => {
     expect(state.knowledge.saveFolder).toBe('Clips');
   });
 
+  it('preserves stage 6 source IDs and health metadata', () => {
+    const state = normalizeState({ version: 7, subscriptions: [{ id: 's', url: 'https://example.com/feed.xml', name: '示例', group: '', entries: [{ id: 'local:one', sourceId: 'guid:one', feedUrl: 'https://example.com/feed.xml', title: '文章', summary: '', content: '' }], updatedAt: 0, lastAttemptAt: 0, healthStatus: 'warning', healthCheckedAt: 123, healthError: '发生重定向' }] });
+    expect(state.version).toBe(CURRENT_STATE_VERSION);
+    expect(state.subscriptions[0].entries[0].sourceId).toBe('guid:one');
+    expect(state.subscriptions[0].healthStatus).toBe('warning');
+    expect(state.subscriptions[0].healthError).toBe('发生重定向');
+  });
+
   it('rejects data from a future version', () => {
     expect(() => normalizeState({ version: CURRENT_STATE_VERSION + 1 })).toThrow('不支持的本地数据版本');
   });

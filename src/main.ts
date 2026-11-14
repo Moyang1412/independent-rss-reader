@@ -12,6 +12,7 @@ import { markAllReadIds, pruneLastReadPositions } from './core/reading';
 import { countNewEntries, nextRetryAt, shouldAttemptSubscription } from './core/refresh';
 import { DEFAULT_CACHE_LIMIT, imageUrlsInEntry, mergeCachedEntries } from './core/cache';
 import { articleFilename, isAlreadySaved, markArticleSaved, normalizeTags, renderDailyNoteEntry, renderTemplate, safeVaultPath, templateVariables, updateArticleKnowledge } from './core/knowledge';
+import { FeedFetchError } from './core/feed-errors';
 import { ImportOpmlModal } from './opml-modal';
 import { ReaderSettingsTab } from './settings-tab';
 import { READER_VIEW_TYPE, ReaderView } from './view';
@@ -40,6 +41,7 @@ export default class LocalRssPlugin extends Plugin {
     this.addCommand({ id: 'open-reader', name: '打开本地 RSS', callback: () => { void this.openReader(); } });
     this.addCommand({ id: 'add-subscription', name: '添加 RSS 订阅', callback: () => this.openAddSubscription() });
     this.addCommand({ id: 'refresh-subscriptions', name: '刷新 RSS 订阅', callback: () => { void this.refreshSubscriptions(); } });
+    this.addCommand({ id: 'check-subscription-health', name: '检查 RSS 订阅健康状态', callback: () => { void this.checkAllSubscriptionHealth(); } });
     this.addCommand({ id: 'mark-all-read', name: '标记当前订阅全部已读', callback: () => { void this.markAllRead(); } });
     this.addCommand({ id: 'next-article', name: '打开下一篇文章', checkCallback: checking => {
       const view = this.app.workspace.getActiveViewOfType(ReaderView);
@@ -267,7 +269,7 @@ export default class LocalRssPlugin extends Plugin {
     const entries = await this.cacheEntries(result.feed.entries);
     const subscription: Subscription = {
       id: crypto.randomUUID(), url: result.url, name: requestedName.trim() || result.feed.title || new URL(result.url).hostname,
-      group: requestedGroup.trim(), site: result.feed.site, image: result.feed.image, entries,
+      group: requestedGroup.trim(), site: result.feed.site, image: result.feed.image, siteDescription: result.feed.description, language: result.feed.language, generator: result.feed.generator, entries,
       updatedAt: Date.now(), lastAttemptAt: Date.now(), error: '', etag: result.etag, lastModified: result.lastModified,
       paused: false, cacheLimit: DEFAULT_CACHE_LIMIT,
     };
@@ -311,6 +313,9 @@ export default class LocalRssPlugin extends Plugin {
       subscription.entries = await this.cacheEntries(result.feed.entries, subscription.entries);
       subscription.site = result.feed.site;
       subscription.image = result.feed.image;
+      subscription.siteDescription = result.feed.description;
+      subscription.language = result.feed.language;
+      subscription.generator = result.feed.generator;
       subscription.updatedAt = Date.now();
       subscription.lastAttemptAt = Date.now();
       subscription.error = '';
@@ -332,6 +337,49 @@ export default class LocalRssPlugin extends Plugin {
     await this.persist();
   }
 
+  async checkSubscriptionHealth(id: string, notify = true) {
+    const subscription = this.state.subscriptions.find(item => item.id === id);
+    if (!subscription) return false;
+    try {
+      const result = await fetchFeed(subscription.url);
+      subscription.url = result.url;
+      subscription.site = result.feed.site;
+      subscription.image = result.feed.image;
+      subscription.siteDescription = result.feed.description;
+      subscription.language = result.feed.language;
+      subscription.generator = result.feed.generator;
+      subscription.healthStatus = 'healthy';
+      subscription.healthCheckedAt = Date.now();
+      subscription.healthError = undefined;
+      await this.persist();
+      if (notify) new Notice(`健康检查通过：${subscription.name}`);
+      return true;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : '未知错误';
+      subscription.healthStatus = error instanceof FeedFetchError && error.kind === 'redirect' ? 'warning' : 'error';
+      subscription.healthCheckedAt = Date.now();
+      subscription.healthError = detail;
+      await this.persist();
+      if (notify) new Notice(`健康检查失败：${detail}`);
+      return false;
+    }
+  }
+
+  async checkAllSubscriptionHealth() {
+    if (!this.state.subscriptions.length) { new Notice('还没有订阅'); return; }
+    const notice = new Notice('正在检查订阅健康状态…', 0);
+    let healthy = 0;
+    let failed = 0;
+    for (const subscription of this.state.subscriptions) {
+      if (subscription.paused) continue;
+      if (await this.checkSubscriptionHealth(subscription.id, false)) healthy += 1;
+      else failed += 1;
+    }
+    notice.hide();
+    const skipped = this.state.subscriptions.filter(subscription => subscription.paused).length;
+    new Notice(`健康检查完成：${healthy} 个正常，${failed} 个异常${skipped ? `，跳过 ${skipped} 个暂停订阅` : ''}`);
+  }
+
   private async refreshSubscription(subscription: Subscription, automatic = false) {
     const now = Date.now();
     if (!shouldAttemptSubscription(subscription, automatic, now) || this.refreshing.has(subscription.id)) {
@@ -344,8 +392,12 @@ export default class LocalRssPlugin extends Plugin {
       const result = await fetchFeed(subscription.url, subscription);
       const incomingEntries = await this.cacheEntries(result.feed.entries, previousEntries);
       subscription.entries = mergeCachedEntries(previousEntries, incomingEntries, subscription.cacheLimit || DEFAULT_CACHE_LIMIT, this.protectedEntryIds(subscription));
+      subscription.url = result.url;
       subscription.site = result.feed.site;
       subscription.image = result.feed.image;
+      subscription.siteDescription = result.feed.description;
+      subscription.language = result.feed.language;
+      subscription.generator = result.feed.generator;
       subscription.updatedAt = Date.now();
       subscription.error = '';
       subscription.etag = result.etag;

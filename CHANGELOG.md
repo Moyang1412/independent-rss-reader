@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.0 — 2026-11-15
+
+Improve RSS/Atom compatibility and subscription diagnostics.
+
+### Included
+
+- Discover RSS, Atom, and RDF links from HTML site pages;
+- Follow `rel="next"` pagination links for up to five pages and merge entries across pages;
+- De-duplicate paginated entries by their source ID;
+- Parse categories, comments URLs, media URLs/types, site descriptions, language, and generator fields;
+- Resolve relative article, image, enclosure, and site links;
+- Show site icons, site information, and feed cover images in the subscription list;
+- Add per-subscription and all-subscription health checks;
+- Classify timeout, network, certificate, redirect, HTTP, and XML parsing failures with readable messages;
+- State migration to v8 for source IDs and health metadata.
+
 ## 0.6.0 — 2026-11-15
 
 Add local knowledge organization for RSS articles.

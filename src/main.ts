@@ -7,6 +7,7 @@ import { needsStateMigration, normalizeState } from './core/state';
 import { SAVED_ENTRIES_SUBSCRIPTION_ID, type FeedEntry, type Subscription, type StoredState } from './core/model';
 import { exportOpml, normalizeFeedUrl, parseOpml } from './core/feed-parser';
 import { mergeSavedEntries, moveSubscription, shouldRefreshSubscription } from './core/subscriptions';
+import { markAllReadIds } from './core/reading';
 import { ImportOpmlModal } from './opml-modal';
 import { ReaderSettingsTab } from './settings-tab';
 import { READER_VIEW_TYPE, ReaderView } from './view';
@@ -28,6 +29,25 @@ export default class LocalRssPlugin extends Plugin {
     this.addCommand({ id: 'open-reader', name: '打开本地 RSS', callback: () => { void this.openReader(); } });
     this.addCommand({ id: 'add-subscription', name: '添加 RSS 订阅', callback: () => this.openAddSubscription() });
     this.addCommand({ id: 'refresh-subscriptions', name: '刷新 RSS 订阅', callback: () => { void this.refreshSubscriptions(); } });
+    this.addCommand({ id: 'mark-all-read', name: '标记当前订阅全部已读', callback: () => { void this.markAllRead(); } });
+    this.addCommand({ id: 'next-article', name: '打开下一篇文章', checkCallback: checking => {
+      const view = this.app.workspace.getActiveViewOfType(ReaderView);
+      if (!view || !view.canUseKeyboardShortcuts()) return false;
+      if (!checking) view.navigateVisible(1);
+      return true;
+    } });
+    this.addCommand({ id: 'previous-article', name: '打开上一篇文章', checkCallback: checking => {
+      const view = this.app.workspace.getActiveViewOfType(ReaderView);
+      if (!view || !view.canUseKeyboardShortcuts()) return false;
+      if (!checking) view.navigateVisible(-1);
+      return true;
+    } });
+    this.addCommand({ id: 'refresh-current-subscription', name: '刷新当前 RSS 订阅', checkCallback: checking => {
+      const view = this.app.workspace.getActiveViewOfType(ReaderView);
+      if (!view || !view.canUseKeyboardShortcuts()) return false;
+      if (!checking) view.refreshCurrentSubscription();
+      return true;
+    } });
     this.addCommand({ id: 'import-opml', name: '导入 OPML', callback: () => this.openImportOpml() });
     this.addCommand({ id: 'export-opml', name: '导出 OPML', callback: () => { void this.exportSubscriptions(); } });
     this.addSettingTab(new ReaderSettingsTab(this.app, this));
@@ -206,6 +226,17 @@ export default class LocalRssPlugin extends Plugin {
     await this.persist();
     notice.hide();
     new Notice(success ? `已刷新“${subscription.name}”` : `刷新失败：${subscription.error || '未知错误'}`);
+  }
+
+  async markAllRead() {
+    const id = this.state.selectedSubscriptionId || this.state.subscriptions[0]?.id;
+    const subscription = id === SAVED_ENTRIES_SUBSCRIPTION_ID
+      ? { entries: this.state.savedEntries }
+      : this.state.subscriptions.find(item => item.id === id);
+    if (!subscription) { new Notice('还没有选中的订阅'); return; }
+    this.state.readIds = markAllReadIds(this.state.readIds, subscription.entries);
+    await this.persist();
+    new Notice('已将当前订阅全部标记为已读');
   }
 
   async importOpml(text: string) {

@@ -1,6 +1,6 @@
 {
   "name": "independent-rss-reader",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "description": "Independent local and personal RSS reader for Obsidian.",

@@ -4,10 +4,11 @@ import { SAVED_ENTRIES_SUBSCRIPTION_ID, type FeedEntry, type Subscription } from
 import { sanitizeArticleHtml } from './core/feed-parser';
 import { MicrophoneRecorder } from './audio/recorder';
 import { countUnreadEntries } from './core/subscriptions';
+import { adjacentEntryId, filterRecentEntries, RECENT_DAYS } from './core/reading';
 
 export const READER_VIEW_TYPE = 'independent-rss-reader-view';
 
-type Filter = 'all' | 'unread' | 'favorites' | 'later';
+type Filter = 'all' | 'unread' | 'favorites' | 'later' | 'recent';
 
 function safeSetHtml(element: HTMLElement, html: string) {
   const candidate = element as HTMLElement & { setHTML?: (value: string, options?: unknown) => void };
@@ -49,6 +50,9 @@ export class ReaderView extends ItemView {
   override async onOpen() {
     this.contentEl.empty();
     this.contentEl.addClass('lrr-view');
+    this.contentEl.tabIndex = 0;
+    this.contentEl.setAttribute('aria-keyshortcuts', 'j k ArrowUp ArrowDown r');
+    this.registerDomEvent(this.contentEl, 'keydown', event => this.handleKeydown(event));
     const shell = this.contentEl.createDiv({ cls: 'lrr-shell' });
     const header = shell.createEl('header', { cls: 'lrr-header' });
     const title = header.createEl('h1', { text: '本地 RSS' });
@@ -90,14 +94,18 @@ export class ReaderView extends ItemView {
     };
     record.onclick = () => { void this.toggleRecording(); };
     const filters = center.createDiv({ cls: 'lrr-filters', attr: { role: 'toolbar', 'aria-label': '文章筛选' } });
-    for (const [value, label] of [['all', '全部'], ['unread', '未读'], ['favorites', '收藏'], ['later', '稍后读']] as const) {
+    for (const [value, label] of [['all', '全部'], ['unread', '未读'], ['favorites', '收藏'], ['later', '稍后读'], ['recent', `最近 ${RECENT_DAYS} 天`]] as const) {
       const button = filters.createEl('button', { text: label, attr: { type: 'button', 'aria-pressed': String(value === this.filter) } });
       button.onclick = () => { this.filter = value; for (const item of filters.children) item.setAttribute('aria-pressed', String(item === button)); this.renderArticles(); };
     }
+    const markAll = filters.createEl('button', { text: '全部已读', attr: { type: 'button', 'aria-label': '将当前订阅全部标记为已读' } });
+    markAll.addClass('lrr-mark-all-read');
+    markAll.onclick = () => { void this.plugin.markAllRead(); };
     this.status = center.createDiv({ cls: 'lrr-status', attr: { role: 'status', 'aria-live': 'polite' } });
     this.articleList = center.createDiv({ cls: 'lrr-article-list' });
     this.article = body.createEl('article', { cls: 'lrr-article', attr: { 'aria-live': 'polite' } });
     this.render();
+    this.contentEl.focus({ preventScroll: true });
     if (!this.plugin.state.subscriptions.length) this.status.setText('还没有订阅，点击“+”添加一个 RSS 或 Atom 地址。');
     await Promise.resolve();
   }
@@ -139,7 +147,7 @@ export class ReaderView extends ItemView {
         if (subscription.paused) meta.createSpan({ text: '已暂停', cls: 'lrr-source-state' });
         else if (subscription.error) meta.createSpan({ text: '更新失败', cls: 'lrr-source-error', attr: { title: subscription.error } });
         else if (subscription.updatedAt) meta.createSpan({ text: new Date(subscription.updatedAt).toLocaleDateString(), cls: 'lrr-source-date' });
-        row.onclick = () => { this.plugin.state.selectedSubscriptionId = subscription.id; this.selectedId = ''; void this.plugin.persist(); this.render(); };
+        row.onclick = () => { this.plugin.state.selectedSubscriptionId = subscription.id; this.selectedId = ''; this.plugin.state.selectedEntryId = ''; void this.plugin.persist(); this.render(); };
         if (!isSaved) {
           row.ondragstart = event => { event.dataTransfer?.setData('text/plain', subscription.id); if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'; };
           row.ondragover = event => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'; };
@@ -164,7 +172,8 @@ export class ReaderView extends ItemView {
     const subscription = this.currentSubscription();
     if (!subscription) return [];
     const query = this.search?.value.trim().toLocaleLowerCase() || '';
-    return subscription.entries.filter(entry => {
+    const entries = this.filter === 'recent' ? filterRecentEntries(subscription.entries) : subscription.entries;
+    return entries.filter(entry => {
       if (this.filter === 'unread' && this.plugin.state.readIds.includes(entry.id)) return false;
       if (this.filter === 'favorites' && !this.plugin.state.favoriteIds.includes(entry.id)) return false;
       if (this.filter === 'later' && !this.plugin.state.laterIds.includes(entry.id)) return false;
@@ -172,30 +181,103 @@ export class ReaderView extends ItemView {
     });
   }
 
+  private sourceLabel(entry: FeedEntry, subscription = this.currentSubscription()): string {
+    if (subscription?.id === SAVED_ENTRIES_SUBSCRIPTION_ID) return entry.feedUrl;
+    return subscription?.name || subscription?.url || entry.feedUrl;
+  }
+
+  private selectEntry(entryId: string): boolean {
+    const entry = this.visibleEntries().find(item => item.id === entryId);
+    if (!entry) return false;
+    this.selectedId = entry.id;
+    this.plugin.state.selectedEntryId = entry.id;
+    if (!this.plugin.state.readIds.includes(entry.id)) this.plugin.state.readIds.push(entry.id);
+    void this.plugin.persist();
+    this.render();
+    this.contentEl.focus({ preventScroll: true });
+    return true;
+  }
+
+  private navigate(direction: -1 | 1): boolean {
+    const entries = this.visibleEntries();
+    const currentId = this.selectedId || this.plugin.state.selectedEntryId;
+    const nextId = adjacentEntryId(entries, currentId, direction);
+    return nextId ? this.selectEntry(nextId) : false;
+  }
+
+  navigateVisible(direction: -1 | 1): boolean {
+    return this.navigate(direction);
+  }
+
+  refreshCurrentSubscription() {
+    const subscription = this.currentSubscription();
+    if (subscription && subscription.id !== SAVED_ENTRIES_SUBSCRIPTION_ID) void this.plugin.refreshOneSubscription(subscription.id);
+  }
+
+  canUseKeyboardShortcuts(): boolean {
+    const active = this.contentEl.ownerDocument.activeElement;
+    return !(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement || (active instanceof HTMLElement && active.isContentEditable));
+  }
+
+  private handleKeydown(event: KeyboardEvent) {
+    if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
+    const target = event.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable)) return;
+    const key = event.key.toLowerCase();
+    if (key === 'j' || event.key === 'ArrowDown') {
+      if (this.navigate(1)) event.preventDefault();
+      return;
+    }
+    if (key === 'k' || event.key === 'ArrowUp') {
+      if (this.navigate(-1)) event.preventDefault();
+      return;
+    }
+    if (key === 'r') {
+      const subscription = this.currentSubscription();
+      if (subscription && subscription.id !== SAVED_ENTRIES_SUBSCRIPTION_ID) {
+        event.preventDefault();
+        void this.plugin.refreshOneSubscription(subscription.id);
+      }
+    }
+  }
+
   private renderArticles() {
     this.articleList.empty();
     const entries = this.visibleEntries();
     this.status.setText(entries.length ? `${entries.length} 篇文章` : '没有符合条件的文章');
+    const subscription = this.currentSubscription();
     for (const entry of entries) {
       const row = this.articleList.createEl('button', { cls: 'lrr-article-row', attr: { type: 'button', 'aria-pressed': String(this.selectedId === entry.id) } });
       row.createSpan({ text: entry.title, cls: 'lrr-article-title' });
+      row.createSpan({ text: this.sourceLabel(entry, subscription), cls: 'lrr-article-source' });
       row.createSpan({ text: entry.publishedAt ? new Date(entry.publishedAt).toLocaleDateString() : '', cls: 'lrr-article-date' });
       if (!this.plugin.state.readIds.includes(entry.id)) row.addClass('is-unread');
       if (this.plugin.state.favoriteIds.includes(entry.id)) row.createSpan({ text: '★', cls: 'lrr-article-mark', attr: { 'aria-label': '已收藏' } });
-      row.onclick = () => { this.selectedId = entry.id; this.plugin.state.selectedEntryId = entry.id; if (!this.plugin.state.readIds.includes(entry.id)) this.plugin.state.readIds.push(entry.id); void this.plugin.persist(); this.render(); };
+      row.onclick = () => { this.selectEntry(entry.id); };
     }
   }
 
   private renderArticle() {
     this.article.empty();
-    const entry = this.currentSubscription()?.entries.find(item => item.id === (this.selectedId || this.plugin.state.selectedEntryId));
+    const subscription = this.currentSubscription();
+    const entry = subscription?.entries.find(item => item.id === (this.selectedId || this.plugin.state.selectedEntryId));
     if (!entry) { this.article.createEl('p', { text: '选择一篇文章开始阅读。', cls: 'lrr-empty' }); return; }
     const head = this.article.createDiv({ cls: 'lrr-article-head' });
     head.createEl('h2', { text: entry.title });
     const meta = head.createDiv({ cls: 'lrr-article-meta' });
+    const source = subscription?.id === SAVED_ENTRIES_SUBSCRIPTION_ID ? entry.feedUrl : (subscription?.name || subscription?.url);
+    if (source) meta.createSpan({ text: `来源：${source}`, attr: { title: source } });
     if (entry.author) meta.createSpan({ text: entry.author });
     if (entry.publishedAt) meta.createSpan({ text: new Date(entry.publishedAt).toLocaleString() });
     const actions = head.createDiv({ cls: 'lrr-article-actions' });
+    const previousId = adjacentEntryId(this.visibleEntries(), entry.id, -1);
+    const previous = actions.createEl('button', { text: '上一篇', attr: { type: 'button' } });
+    previous.disabled = !previousId;
+    previous.onclick = () => { if (previousId) this.selectEntry(previousId); };
+    const nextId = adjacentEntryId(this.visibleEntries(), entry.id, 1);
+    const next = actions.createEl('button', { text: '下一篇', attr: { type: 'button' } });
+    next.disabled = !nextId;
+    next.onclick = () => { if (nextId) this.selectEntry(nextId); };
     const favorite = actions.createEl('button', { text: this.plugin.state.favoriteIds.includes(entry.id) ? '取消收藏' : '收藏', attr: { type: 'button' } });
     favorite.onclick = () => { this.plugin.toggleFavorite(entry.id); this.render(); };
     const later = actions.createEl('button', { text: this.plugin.state.laterIds.includes(entry.id) ? '移出稍后读' : '稍后读', attr: { type: 'button' } });

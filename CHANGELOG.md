@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0 — 2026-11-15
+
+Complete the first reading-efficiency features.
+
+### Included
+
+- Mark every article in the current subscription as read from the reader toolbar;
+- Navigate between visible articles with previous/next buttons;
+- Use `j`/`k` or Arrow Up/Down for article navigation, and `r` to refresh the current subscription;
+- Show the article source in the article list and reading view;
+- Filter the current subscription to articles published in the last 7 days;
+- Keep the local reading state and all existing RSS, Daily Notes, DeepSeek, and subscription-management features.
+
 ## 0.1.5 — 2026-11-15
 
 Complete the remaining subscription-management features.

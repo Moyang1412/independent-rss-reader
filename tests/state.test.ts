@@ -26,6 +26,7 @@ describe('state migrations', () => {
     expect(state.aiTranslations).toEqual({});
     expect(state.organization).toEqual({ enabled: false, targetLanguage: '中文' });
     expect(state.aiOrganizations).toEqual({});
+    expect(state.dataview).toEqual({ enabled: false, indexPath: 'RSS Articles/RSS Articles Index.md' });
   });
 
   it('migrates legacy v1 data and removes the old daily note setting', () => {
@@ -84,5 +85,11 @@ describe('state migrations', () => {
     expect(state.version).toBe(CURRENT_STATE_VERSION);
     expect(state.organization).toEqual({ enabled: false, targetLanguage: '中文' });
     expect(state.aiOrganizations).toEqual({});
+  });
+
+  it('adds the optional Dataview index settings when migrating from v11', () => {
+    const state = normalizeState({ version: 11, knowledge: { saveFolder: 'Clips', saveTemplate: '# {{title}}', dailyNoteTemplate: '- {{title}}' } });
+    expect(state.version).toBe(CURRENT_STATE_VERSION);
+    expect(state.dataview).toEqual({ enabled: false, indexPath: 'RSS Articles/RSS Articles Index.md' });
   });
 });

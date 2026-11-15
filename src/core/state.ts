@@ -3,6 +3,7 @@ import { CURRENT_STATE_VERSION, type StoredState } from './model';
 import { DEFAULT_DEEPSEEK_CONFIG } from '../ai/deepseek';
 import { DEFAULT_REFRESH_INTERVAL_MINUTES } from './refresh';
 import { DEFAULT_DAILY_NOTE_TEMPLATE, DEFAULT_SAVE_FOLDER, DEFAULT_SAVE_TEMPLATE } from './knowledge';
+import { DEFAULT_DATAVIEW_INDEX_PATH } from './dataview';
 
 export const DEFAULT_REMOTE_READ_ONLY_CONFIG = {
   enabled: false,
@@ -20,6 +21,11 @@ export const DEFAULT_TRANSLATION_SETTINGS = {
 export const DEFAULT_ORGANIZATION_SETTINGS = {
   enabled: false,
   targetLanguage: '中文',
+} as const;
+
+export const DEFAULT_DATAVIEW_CONFIG = {
+  enabled: false,
+  indexPath: DEFAULT_DATAVIEW_INDEX_PATH,
 } as const;
 
 const rawStateSchema = z.looseObject({ version: z.number().int().nonnegative().optional() });
@@ -43,6 +49,7 @@ function migratedObject(value: unknown): Record<string, unknown> {
   if (version < 9) data = { ...data, version: CURRENT_STATE_VERSION, remote: data.remote || {} };
   if (version < 10) data = { ...data, version: CURRENT_STATE_VERSION, translation: data.translation || {}, aiTranslations: data.aiTranslations || {} };
   if (version < 11) data = { ...data, version: CURRENT_STATE_VERSION, organization: data.organization || {}, aiOrganizations: data.aiOrganizations || {} };
+  if (version < 12) data = { ...data, version: CURRENT_STATE_VERSION, dataview: data.dataview || {} };
   return data;
 }
 
@@ -97,6 +104,10 @@ export const stateSchema = z.object({
     saveTemplate: z.string().default(DEFAULT_SAVE_TEMPLATE),
     dailyNoteTemplate: z.string().default(DEFAULT_DAILY_NOTE_TEMPLATE),
   }).default({ saveFolder: DEFAULT_SAVE_FOLDER, saveTemplate: DEFAULT_SAVE_TEMPLATE, dailyNoteTemplate: DEFAULT_DAILY_NOTE_TEMPLATE }),
+  dataview: z.object({
+    enabled: z.boolean().default(DEFAULT_DATAVIEW_CONFIG.enabled),
+    indexPath: z.string().default(DEFAULT_DATAVIEW_CONFIG.indexPath),
+  }).default(DEFAULT_DATAVIEW_CONFIG),
   query: z.string().default(''),
   deepseek: z.object({
     enabled: z.boolean().default(DEFAULT_DEEPSEEK_CONFIG.enabled),
@@ -163,6 +174,7 @@ export function normalizeState(value: unknown): StoredState {
     cache: parsed.cache,
     articleKnowledge: parsed.articleKnowledge,
     knowledge: parsed.knowledge,
+    dataview: parsed.dataview,
     query: parsed.query,
     deepseek: parsed.deepseek,
     remote: parsed.remote,

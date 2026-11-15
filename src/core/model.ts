@@ -1,6 +1,6 @@
 import type { DeepSeekConfig } from '../ai/deepseek';
 
-export const CURRENT_STATE_VERSION = 11 as const;
+export const CURRENT_STATE_VERSION = 12 as const;
 export const SAVED_ENTRIES_SUBSCRIPTION_ID = '__saved_entries__';
 
 export type FeedFormat = 'rss' | 'rdf' | 'atom';
@@ -123,6 +123,13 @@ export interface KnowledgeConfig {
   dailyNoteTemplate: string;
 }
 
+/** Optional Dataview index generation settings. The integration only writes
+ * ordinary Markdown and never calls Dataview's internal APIs. */
+export interface DataviewConfig {
+  enabled: boolean;
+  indexPath: string;
+}
+
 export interface OpmlFeed {
   url: string;
   name: string;
@@ -143,6 +150,7 @@ export interface StoredState {
   cache: CacheConfig;
   articleKnowledge: Record<string, ArticleKnowledge>;
   knowledge: KnowledgeConfig;
+  dataview: DataviewConfig;
   query: string;
   deepseek: DeepSeekConfig;
   remote: RemoteReadOnlyConfig;

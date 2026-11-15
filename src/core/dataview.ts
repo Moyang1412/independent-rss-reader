@@ -27,7 +27,7 @@ const FIELD_DEFINITIONS: Readonly<Record<DataviewIndexField, { expression: strin
   article: { expression: 'file.link', label: '文章' },
   source: { expression: 'source', label: '来源' },
   published: { expression: 'published', label: '发布时间' },
-  tags: { expression: 'tags', label: '标签' },
+  tags: { expression: 'file.tags', label: '标签' },
   path: { expression: 'file.path', label: '路径' },
 };
 

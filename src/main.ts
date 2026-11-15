@@ -24,6 +24,7 @@ import { ORGANIZE_PROMPT_VERSION, organizeCacheKey, type ArticleOrganizationSugg
 import { createObsidianOrganizationClient } from './ai/organize-obsidian';
 import { createObsidianRemoteRegistry } from './remote/obsidian';
 import { mergeRemoteSnapshot, remoteSubscriptionKey } from './remote/adapter';
+import { DATAVIEW_INDEX_MARKER, renderDataviewIndex } from './core/dataview';
 
 function unique(values: string[]) { return [...new Set(values)]; }
 
@@ -70,6 +71,7 @@ export default class LocalRssPlugin extends Plugin {
     this.addCommand({ id: 'import-opml', name: '导入 OPML', callback: () => this.openImportOpml() });
     this.addCommand({ id: 'export-opml', name: '导出 OPML', callback: () => { void this.exportSubscriptions(); } });
     this.addCommand({ id: 'sync-remote-read-only', name: '同步远程只读订阅', callback: () => { void this.syncRemoteReadOnly(); } });
+    this.addCommand({ id: 'generate-dataview-index', name: '生成 RSS Dataview 索引', callback: () => { void this.generateDataviewIndex(); } });
     this.addSettingTab(new ReaderSettingsTab(this.app, this));
     this.app.workspace.onLayoutReady(() => {
       if (this.state.refresh.refreshOnOpen) void this.refreshSubscriptions({ automatic: true, reason: 'open' });
@@ -131,6 +133,52 @@ export default class LocalRssPlugin extends Plugin {
   }
 
   async persist() { await this.saveData(this.state); this.refreshViews(); }
+
+  isDataviewAvailable() {
+    const plugins = (this.app as unknown as { plugins?: {
+      enabledPlugins?: Set<string>;
+      plugins?: Record<string, unknown>;
+    } }).plugins;
+    return Boolean(plugins?.enabledPlugins?.has('dataview'));
+  }
+
+  private dataviewIndexPath() {
+    const raw = normalizePath(this.state.dataview.indexPath.trim());
+    if (!raw || raw.endsWith('/')) throw new Error('Dataview 索引路径无效');
+    const separator = raw.lastIndexOf('/');
+    const folder = separator < 0 ? '' : raw.slice(0, separator);
+    const filename = separator < 0 ? raw : raw.slice(separator + 1);
+    if (!filename.toLowerCase().endsWith('.md')) throw new Error('Dataview 索引路径必须是 Markdown 文件（.md）');
+    return safeVaultPath(folder, filename);
+  }
+
+  async generateDataviewIndex() {
+    if (!this.state.dataview.enabled) {
+      new Notice('请先在设置中启用 Dataview 集成');
+      return;
+    }
+    if (!this.isDataviewAvailable()) {
+      new Notice('未检测到已启用的 Dataview 插件；请先安装并启用 Dataview');
+      return;
+    }
+    try {
+      const path = this.dataviewIndexPath();
+      const content = renderDataviewIndex({ saveFolder: this.state.knowledge.saveFolder });
+      const parent = path.split('/').slice(0, -1).join('/');
+      if (parent) await this.ensureFolder(parent);
+      const existing = this.app.vault.getAbstractFileByPath(path);
+      if (existing instanceof TFile) {
+        const previous = await this.app.vault.read(existing);
+        if (!previous.includes(DATAVIEW_INDEX_MARKER)) throw new Error(`目标文件不是本插件生成的 Dataview 索引：${path}`);
+        await this.app.vault.modify(existing, content);
+      }
+      else if (existing) throw new Error(`索引目标不是 Markdown 文件：${path}`);
+      else await this.app.vault.create(path, content);
+      new Notice(`已生成 Dataview 索引：${path}`);
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : '生成 Dataview 索引失败');
+    }
+  }
 
   private cacheImageDirectory() {
     return normalizePath(`${this.manifest.dir}/cache/images`);

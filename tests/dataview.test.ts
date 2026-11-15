@@ -20,7 +20,7 @@ describe('Dataview integration helpers', () => {
     expect(markdown).toContain('file.link AS "文章"');
     expect(markdown).toContain('source AS "来源"');
     expect(markdown).toContain('published AS "发布时间"');
-    expect(markdown).toContain('tags AS "标签"');
+    expect(markdown).toContain('file.tags AS "标签"');
     expect(markdown).toContain('WHERE file.path != this.file.path');
     expect(markdown.endsWith('\n')).toBe(true);
   });

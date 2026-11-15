@@ -112,6 +112,27 @@ export class ReaderSettingsTab extends PluginSettingTab {
       });
     });
 
+    new Setting(containerEl).setName('Obsidian 插件集成').setHeading();
+    const dataviewStatus = this.plugin.isDataviewAvailable()
+      ? '已检测到已启用的 Dataview 插件。'
+      : '未检测到已启用的 Dataview 插件；本地 RSS 阅读和文章保存不受影响。';
+    containerEl.createEl('p', { text: `${dataviewStatus}索引文件使用普通 Markdown 和 Dataview 查询生成，不调用 Dataview 私有 API。` });
+    new Setting(containerEl).setName('启用 Dataview 集成').setDesc('默认关闭。启用后可生成一个可更新的 RSS 文章索引笔记。').addToggle(toggle => {
+      toggle.setValue(this.plugin.state.dataview.enabled).onChange(async value => {
+        this.plugin.state.dataview.enabled = value;
+        await this.plugin.persist();
+      });
+    });
+    new Setting(containerEl).setName('Dataview 索引路径').setDesc('相对于库根目录的 Markdown 文件路径；默认 RSS Articles/RSS Articles Index.md。').addText(text => {
+      text.setValue(this.plugin.state.dataview.indexPath).onChange(async value => {
+        this.plugin.state.dataview.indexPath = value.trim();
+        await this.plugin.persist();
+      });
+    });
+    new Setting(containerEl).setName('生成/更新 Dataview 索引').setDesc('按文章保存文件夹生成索引；重复执行会覆盖同一索引文件，不会修改文章内容。').addButton(button => {
+      button.setButtonText('生成索引').onClick(() => { void this.plugin.generateDataviewIndex(); });
+    });
+
     new Setting(containerEl).setName('DeepSeek（可选）').setHeading();
     containerEl.createEl('p', { text: '配置后可在文章页面生成摘要、直接录音或选择音频进行语音搜索。录音会在本地编码为 16-bit PCM WAV；选择音频时支持 WAV、Ogg Opus，单个音频最多 8 MiB、120 秒。API Key 只保存在当前 Obsidian 库的插件数据中；不配置时，本地 RSS 阅读功能仍可正常使用。' });
     new Setting(containerEl).setName('启用 DeepSeek').setDesc('影响摘要、语音搜索、翻译和 AI 整理；不影响订阅、阅读、收藏和日记。').addToggle(toggle => {

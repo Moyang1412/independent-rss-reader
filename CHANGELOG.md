@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.12.0 — 2026-11-15
+
+Add an optional Dataview integration while keeping saved articles as ordinary Markdown and local RSS reading independent.
+
+### Included
+
+- Add an opt-in Dataview integration setting with a vault-relative index path, defaulting to `RSS Articles/RSS Articles Index.md`;
+- Add the `生成 RSS Dataview 索引` command and a settings-page button to generate or rewrite the index;
+- Generate an idempotent Markdown index containing a `dataview` query for saved article links, sources, publication times, and tags;
+- Keep the index readable as ordinary Markdown when Dataview is not installed or enabled;
+- Reuse the existing article frontmatter fields (`source`, `published`, and `tags`) for queries instead of calling Dataview's internal write APIs;
+- Validate index folders before placing them in a Dataview `FROM` clause;
+- Keep RSS fetching, local article storage, reading state, offline cache, Markdown saves, and Daily Notes independent of Dataview;
+- Add state migration to v12 for the optional Dataview settings.
+
 ## 0.11.0 — 2026-11-15
 
 Add optional AI-assisted article organization while keeping manual knowledge editing and local reading independent.
